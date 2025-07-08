@@ -9,6 +9,8 @@ class FileManager(models.Model):
     file = models.FileField(upload_to="files/")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    file_mime_type = models.CharField(max_length=100, blank=True, null=True)
+    file_size = models.PositiveIntegerField(blank=True, null=True)
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from telebot import apihelper
 
 from config.settings import BASE_DIR
+from apps.account.models import User
+from apps.file_manager.models import FileManager
 
 # Configure proxy
 apihelper.proxy = {
@@ -17,24 +19,50 @@ API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 
 bot = telebot.TeleBot(API_TOKEN)
 
+def creat_user_if_not_exists(user_id):
+    if not User.objects.filter(user_id=user_id).exists():
+        User.objects.create(user_id=user_id)
 
-# Handle '/start' and '/help'
-@bot.message_handler(commands=["help", "start"])
-def send_welcome(message):
-    bot.reply_to(
-        message,
-        """\
-Hi there, I am EchoBot.
-I am here to echo your kind words back to you. Just say anything nice and I'll say the exact same thing to you!\
-""",
-    )
+@bot.message_handler(content_types=['document'])
+def handle_file(message):
+    try:
+        creat_user_if_not_exists(message.from_user.id)
+        file_info = bot.get_file(message.document.file_id)
+        file = bot.download_file(file_info.file_path)
+        file_name = message.document.file_name
+        user_id = message.from_user.id
 
+        # file_path = f"uploads/{user_id}/{file_name}"
+        # full_path = os.path.join(settings.MEDIA_ROOT, file_path)
+        # os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        # with open(full_path, 'wb') as f:
+        #     f.write(file)
 
-# Handle all other messages with content_type 'text' (content_types defaults to ['text'])
-@bot.message_handler(func=lambda message: True)
-def echo_message(message):
-    bot.reply_to(message, message.text)
+        # UserFile.objects.create(
+        #     user_id=user_id,
+        #     file_name=file_name,
+        #     file_path=file_path
+        # )
+        # TODO add check type.
+        FileManager.objects.create(
+            user_id=user_id,
+            file_name=file_name,
+            file=file,
+            file_size=file_info.file_size,
+            file_type=message.document.mime_type
+        )
 
+        bot.reply_to(message, f"File {file_name} saved successfully!")
+    except Exception as e:
+        # TODO change this
+        print(f"Error saving file: {str(e)}")
+        bot.reply_to(message, f"Error saving file: {str(e)}")
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Send me me a file, and I'll store it for you!")
 
 def start_bot_polling():
-    bot.infinity_polling()
+    if API_TOKEN is None or API_TOKEN == "":
+        raise ValueError("TELEGRAM_BOT_API_TOKEN is not set.")
+    bot.polling(none_stop=True)

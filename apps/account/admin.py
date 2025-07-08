@@ -9,20 +9,18 @@ from .models import User
 class UserAdmin(UserAdmin):
     list_display = (
         "username",
-        "email",
         "first_name",
         "last_name",
-        "phone_number",
         "date_create",
         "date_update",
         "is_verified",
     )
-    search_fields = ("username", "email", "first_name", "last_name", "phone_number")
+    search_fields = ("username", "first_name", "last_name", "phone_number")
     ordering = ("-date_create",)
     list_filter = ("is_staff", "is_active")
     readonly_fields = ("date_create", "date_update")
     fieldsets = (
-        (None, {"fields": ("username", "email", "password")}),
+        (None, {"fields": ("username", "password")}),
         (
             "Personal info",
             {
@@ -54,12 +52,10 @@ class UserAdmin(UserAdmin):
                 "classes": ("wide",),
                 "fields": (
                     "username",
-                    "email",
                     "password1",
                     "password2",
                     "first_name",
                     "last_name",
-                    "phone_number",
                     "is_verified",
                     "is_staff",
                     "is_active",
