@@ -17,7 +17,10 @@ ALLOWED_HOSTS = (
 # Application definition
 THERD_PARTY_APPS = ["django_minio_backend"]
 
-LOCLA_APPS = []
+LOCLA_APPS = [
+    "apps.file_manager",
+    "apps.account",
+]
 
 DEFAULT_APPS = [
     "django.contrib.admin",
@@ -61,6 +64,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+
+AUTH_USER_MODEL = "account.User"
 
 # Database
 
