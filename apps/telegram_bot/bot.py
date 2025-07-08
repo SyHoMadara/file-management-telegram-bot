@@ -36,7 +36,7 @@ def handle_file(message):
             file_mime_type=message.document.mime_type
         )
 
-        bot.reply_to(message, f"File {str(saved_file.file)} saved successfully!")
+        bot.reply_to(message, f"File {str(saved_file.file.url)} saved successfully!")
     except Exception as e:
         # TODO change this
         print(f"Error saving file: {str(e)}")
