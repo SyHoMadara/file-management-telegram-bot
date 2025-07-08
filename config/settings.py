@@ -25,6 +25,7 @@ THERD_PARTY_APPS = [
 LOCLA_APPS = [
     "apps.file_manager",
     "apps.account",
+    "apps.telegram_bot.apps.TelegramBotConfig",
 ]
 
 DEFAULT_APPS = [
