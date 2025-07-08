@@ -15,7 +15,12 @@ ALLOWED_HOSTS = (
 
 
 # Application definition
-THERD_PARTY_APPS = ["django_minio_backend"]
+THERD_PARTY_APPS = [
+    "django_minio_backend",
+    "celery",
+    "django_celery_beat",
+    "django_celery_results",
+]
 
 LOCLA_APPS = [
     "apps.file_manager",

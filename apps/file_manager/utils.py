@@ -32,7 +32,9 @@ def validate_file_type(file, allowed_mime_types=None, exclude_mime_types=None):
         file_obj.seek(file_pos)
 
         # Call the Celery task asynchronously
-        result = validate_file_task.delay(file_content, allowed_mime_types, exclude_mime_types)
+        result = validate_file_task.delay(
+            file_content, allowed_mime_types, exclude_mime_types
+        )
         return result.get()  # Wait for the task result (synchronous for simplicity)
     except Exception as e:
         raise ValueError(f"Error validating file type: {str(e)}")

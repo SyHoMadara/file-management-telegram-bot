@@ -2,7 +2,9 @@ import magic
 from celery import shared_task
 
 
-def validate_file_type_sync(file_content, allowed_mime_types=None, exclude_mime_types=None):
+def validate_file_type_sync(
+    file_content, allowed_mime_types=None, exclude_mime_types=None
+):
     """Validate if the file's MIME type is in the allowed list.
 
     Args:

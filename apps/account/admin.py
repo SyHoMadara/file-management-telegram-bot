@@ -33,25 +33,39 @@ class UserAdmin(UserAdmin):
                 )
             },
         ),
-        ("Permissions", {"fields": ("is_staff", "is_active", "is_verified", "groups", "user_permissions")}),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "is_staff",
+                    "is_active",
+                    "is_verified",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
         ("Important dates", {"fields": ("date_create", "date_update")}),
     )
     add_fieldsets = (
-        (None, {
-            "classes": ("wide",),
-            "fields": (
-                "username",
-                "email",
-                "password1",
-                "password2",
-                "first_name",
-                "last_name",
-                "phone_number",
-                "is_verified",
-                "is_staff",
-                "is_active",
-            ),
-        }),
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "email",
+                    "password1",
+                    "password2",
+                    "first_name",
+                    "last_name",
+                    "phone_number",
+                    "is_verified",
+                    "is_staff",
+                    "is_active",
+                ),
+            },
+        ),
     )
 
     actions = ["verify_users", "deactivate_users", "activate_users"]
