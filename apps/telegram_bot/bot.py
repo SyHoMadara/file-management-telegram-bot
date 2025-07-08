@@ -20,7 +20,7 @@ API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 bot = telebot.TeleBot(API_TOKEN)
 
 def creat_user_if_not_exists(user_id):
-    if not User.objects.filter(user_id=user_id).exists():
+    if not User.objects.filter(username=user_id).exists():
         User.objects.create(username=user_id)
 
 @bot.message_handler(content_types=['document'])
