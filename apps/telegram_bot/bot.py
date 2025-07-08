@@ -46,10 +46,10 @@ def handle_file(message):
         # TODO add check type.
         FileManager.objects.create(
             user=user,
-            file_name=file_name,
+            name=file_name,
             file=file,
             file_size=file_info.file_size,
-            file_type=message.document.mime_type
+            file_mime_type=message.document.mime_type
         )
 
         bot.reply_to(message, f"File {file_name} saved successfully!")
