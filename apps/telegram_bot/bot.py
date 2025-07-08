@@ -31,7 +31,7 @@ def handle_file(message):
         file = bot.download_file(file_info.file_path)
         file_name = message.document.file_name
         user_id = message.from_user.id
-
+        user = User.objects.get(user_id=user_id)
         # file_path = f"uploads/{user_id}/{file_name}"
         # full_path = os.path.join(settings.MEDIA_ROOT, file_path)
         # os.makedirs(os.path.dirname(full_path), exist_ok=True)
@@ -45,7 +45,7 @@ def handle_file(message):
         # )
         # TODO add check type.
         FileManager.objects.create(
-            user_id=user_id,
+            user=user,
             file_name=file_name,
             file=file,
             file_size=file_info.file_size,
