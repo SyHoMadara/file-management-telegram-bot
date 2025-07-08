@@ -10,12 +10,6 @@ from apps.account.models import User
 from apps.file_manager.models import FileManager
 from io import BytesIO
 
-# Configure proxy
-##apihelper.proxy = {
-##    "http": "http://localhost:2080",
-##    "https": "http://localhost:2080",
-##}
-##
 load_dotenv(BASE_DIR / ".env")
 API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 
@@ -34,7 +28,7 @@ def handle_file(message):
         file_name = message.document.file_name
         user_id = message.from_user.id
         user = User.objects.get(username=user_id)
-        FileManager.objects.create(
+        saved_file = FileManager.objects.create(
             user=user,
             name=file_name,
             file=ContentFile(file, name=file_name),
@@ -42,7 +36,7 @@ def handle_file(message):
             file_mime_type=message.document.mime_type
         )
 
-        bot.reply_to(message, f"File {file_name} saved successfully!")
+        bot.reply_to(message, f"File {str(saved_file.file)} saved successfully!")
     except Exception as e:
         # TODO change this
         print(f"Error saving file: {str(e)}")
