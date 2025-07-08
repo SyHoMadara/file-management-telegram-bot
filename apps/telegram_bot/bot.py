@@ -3,10 +3,12 @@ import os
 import telebot
 from dotenv import load_dotenv
 from telebot import apihelper
+from django.core.files.base import ContentFile
 
 from config.settings import BASE_DIR
 from apps.account.models import User
 from apps.file_manager.models import FileManager
+from io import BytesIO
 
 # Configure proxy
 ##apihelper.proxy = {
@@ -32,22 +34,10 @@ def handle_file(message):
         file_name = message.document.file_name
         user_id = message.from_user.id
         user = User.objects.get(username=user_id)
-        # file_path = f"uploads/{user_id}/{file_name}"
-        # full_path = os.path.join(settings.MEDIA_ROOT, file_path)
-        # os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        # with open(full_path, 'wb') as f:
-        #     f.write(file)
-
-        # UserFile.objects.create(
-        #     user_id=user_id,
-        #     file_name=file_name,
-        #     file_path=file_path
-        # )
-        # TODO add check type.
         FileManager.objects.create(
             user=user,
             name=file_name,
-            file=file,
+            file=ContentFile(file, name=file_name),
             file_size=file_info.file_size,
             file_mime_type=message.document.mime_type
         )
