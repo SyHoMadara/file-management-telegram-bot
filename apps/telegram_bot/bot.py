@@ -9,11 +9,11 @@ from apps.account.models import User
 from apps.file_manager.models import FileManager
 
 # Configure proxy
-apihelper.proxy = {
-    "http": "http://localhost:2080",
-    "https": "http://localhost:2080",
-}
-
+##apihelper.proxy = {
+##    "http": "http://localhost:2080",
+##    "https": "http://localhost:2080",
+##}
+##
 load_dotenv(BASE_DIR / ".env")
 API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 
