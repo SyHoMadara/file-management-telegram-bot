@@ -21,7 +21,7 @@ bot = telebot.TeleBot(API_TOKEN)
 
 def creat_user_if_not_exists(user_id):
     if not User.objects.filter(user_id=user_id).exists():
-        User.objects.create(user_id=user_id)
+        User.objects.create(username=user_id)
 
 @bot.message_handler(content_types=['document'])
 def handle_file(message):
