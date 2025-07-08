@@ -5,7 +5,7 @@ User = get_user_model()
 
 
 class FileManager(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     file = models.FileField(upload_to="files/")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
