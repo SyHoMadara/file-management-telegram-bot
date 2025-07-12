@@ -1,6 +1,5 @@
 from django.contrib.admin import register
 from django.contrib.auth.admin import UserAdmin as ModelAdmin
-from django.utils.translation import gettext_lazy as _
 
 from .models import User
 
