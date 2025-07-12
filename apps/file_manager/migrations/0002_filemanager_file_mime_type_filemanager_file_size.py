@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('file_manager', '0001_initial'),
+        ("file_manager", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='filemanager',
-            name='file_mime_type',
+            model_name="filemanager",
+            name="file_mime_type",
             field=models.CharField(blank=True, max_length=100, null=True),
         ),
         migrations.AddField(
-            model_name='filemanager',
-            name='file_size',
+            model_name="filemanager",
+            name="file_size",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
     ]

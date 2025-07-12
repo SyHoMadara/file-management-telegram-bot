@@ -1,25 +1,25 @@
 import os
 
 import telebot
-from dotenv import load_dotenv
-from telebot import apihelper
 from django.core.files.base import ContentFile
+from dotenv import load_dotenv
 
-from config.settings import BASE_DIR
 from apps.account.models import User
 from apps.file_manager.models import FileManager
-from io import BytesIO
+from config.settings import BASE_DIR
 
 load_dotenv(BASE_DIR / ".env")
 API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 
 bot = telebot.TeleBot(API_TOKEN)
 
+
 def creat_user_if_not_exists(user_id):
     if not User.objects.filter(username=user_id).exists():
         User.objects.create(username=user_id)
 
-@bot.message_handler(content_types=['document'])
+
+@bot.message_handler(content_types=["document"])
 def handle_file(message):
     try:
         creat_user_if_not_exists(message.from_user.id)
@@ -33,7 +33,7 @@ def handle_file(message):
             name=file_name,
             file=ContentFile(file, name=file_name),
             file_size=file_info.file_size,
-            file_mime_type=message.document.mime_type
+            file_mime_type=message.document.mime_type,
         )
 
         bot.reply_to(message, f"File {str(saved_file.file)} saved successfully!")
@@ -42,9 +42,11 @@ def handle_file(message):
         print(f"Error saving file: {str(e)}")
         bot.reply_to(message, f"Error saving file: {str(e)}")
 
-@bot.message_handler(commands=['start'])
+
+@bot.message_handler(commands=["start"])
 def start(message):
     bot.reply_to(message, "Send me me a file, and I'll store it for you!")
+
 
 def start_bot_polling():
     if API_TOKEN is None or API_TOKEN == "":
