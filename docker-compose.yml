@@ -1,0 +1,13 @@
+services:
+  file-management-telegram-bot:
+    container_name: telegram-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - file-management-telegram-bot:latest
+    image: file-management-telegram-bot:latest
+    
+    env_file:
+      - .env
+
