@@ -13,6 +13,7 @@ wheels/
 .env
 .env.local
 .env.*.local
+keys/
 
 # Database files
 db.sqlite3

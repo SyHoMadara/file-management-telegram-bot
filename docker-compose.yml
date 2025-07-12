@@ -7,7 +7,25 @@ services:
       cache_from:
         - file-management-telegram-bot:latest
     image: file-management-telegram-bot:latest
-    
+    networks:
+      - local_connection
+      - nat_connection
     env_file:
       - .env
 
+  minio:
+    container_name: minio_telegram_bot
+    volumes:
+      - minio_data:/data
+    image: minio/minio:latest
+    environment:
+      - MINIO_ACCESS_KEY_FILE={MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY_FILE={MINIO_SECRET_KEY}
+
+networks: 
+  nat_connection:{}
+  local_connection:{}
+
+volumes:
+  minio_data:
+    driver: local
