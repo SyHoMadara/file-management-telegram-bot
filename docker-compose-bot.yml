@@ -11,9 +11,7 @@ services:
       - bot-internal
     restart: unless-stopped
     command: >
-      telegram-bot-api 
-      --api-id=${TELEGRAM_API_ID} 
-      --api-hash=${TELEGRAM_API_HASH} 
+      telegram-bot-api  
       --local 
       --http-port=8081
 
