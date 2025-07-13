@@ -1,5 +1,5 @@
 import os
-
+import logging
 import telebot
 from django.core.files.base import ContentFile
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ load_dotenv(BASE_DIR / ".env")
 API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 
 bot = telebot.TeleBot(API_TOKEN)
-
+logger = logging.getLogger(__name__)
 
 def creat_user_if_not_exists(user_id):
     if not User.objects.filter(username=user_id).exists():
@@ -37,9 +37,9 @@ def handle_file(message):
         )
 
         bot.reply_to(message, f"File {str(saved_file.file.url)} saved successfully!")
+        logger.info(f"File {file_name} saved successfully for user {user_id}")
     except Exception as e:
-        # TODO change this
-        print(f"Error saving file: {str(e)}")
+        logger.error(f"Error saving file for user {message.from_user.id}: {str(e)}", exc_info=True)
         bot.reply_to(message, f"Error saving file: {str(e)}")
 
 

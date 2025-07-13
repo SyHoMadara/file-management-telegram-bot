@@ -1,32 +1,47 @@
 services:
-  file-management-telegram-bot:
+  telegram-bot:
     container_name: telegram-bot
     build:
       context: .
       dockerfile: Dockerfile
       cache_from:
         - file-management-telegram-bot:latest
+    depends_on:
+      - minio
     image: file-management-telegram-bot:latest
+    
     networks:
-      - nat_connection
+      nat_connection:
+        ipv4_address: "172.19.1.1"
     env_file:
       - .env
+    volumes:
+      - django-data:/app/data/
+    
 
   minio:
     container_name: minio_telegram_bot
     volumes:
-      - minio_data:/data
-    image: minio/minio:latest
+      - minio-data:/data
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
     environment:
-      - MINIO_ACCESS_KEY_FILE={MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY_FILE={MINIO_SECRET_KEY}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
     networks:
-      - nat_connection
+      nat_connection:
+        ipv4_address: "172.19.1.2"
+    command: server /data --console-address ":9001"
 
 networks:
   nat_connection:
-    driver: bridge
+    name: nat_connection
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.19.0.0/16"
 
 volumes:
-  minio_data:
+  minio-data:
+    driver: local
+  django-data:
     driver: local

@@ -293,6 +293,19 @@ wheels = [
 ]
 
 [[package]]
+name = "django-minio-storage"
+version = "0.5.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "minio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e3/be/d5672fb2b03b6c36c5eef99759007564c4ac87ad2a6e44f00eac4c33b65f/django_minio_storage-0.5.8.tar.gz", hash = "sha256:57f2ed7a16385458de0af089326e5494212b74d319c4dfc0c48173a72e5d06b5", size = 118449, upload-time = "2025-05-08T17:24:29.591Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/15/062d800180ae900e8edffc3dc5a4403ef3c7a6c620be1e0c490671b6432a/django_minio_storage-0.5.8-py3-none-any.whl", hash = "sha256:db715c32a9addd33462471af0470e2401338ca59e730660dce11b9f7929928e7", size = 17962, upload-time = "2025-05-08T17:24:27.94Z" },
+]
+
+[[package]]
 name = "django-timezone-field"
 version = "7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -687,6 +700,7 @@ dependencies = [
     { name = "django-celery-beat" },
     { name = "django-celery-results" },
     { name = "django-minio-backend" },
+    { name = "django-minio-storage" },
     { name = "ipython" },
     { name = "pytelegrambotapi" },
     { name = "python-dotenv" },
@@ -701,6 +715,7 @@ requires-dist = [
     { name = "django-celery-beat", specifier = ">=2.8.1" },
     { name = "django-celery-results", specifier = ">=2.6.0" },
     { name = "django-minio-backend", specifier = ">=3.8.0" },
+    { name = "django-minio-storage", specifier = ">=0.5.8" },
     { name = "ipython", specifier = ">=9.4.0" },
     { name = "pytelegrambotapi", specifier = ">=4.27.0" },
     { name = "python-dotenv", specifier = ">=1.1.1" },

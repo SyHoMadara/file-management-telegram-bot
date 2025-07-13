@@ -10,6 +10,7 @@ dependencies = [
     "django-celery-beat>=2.8.1",
     "django-celery-results>=2.6.0",
     "django-minio-backend>=3.8.0",
+    "django-minio-storage>=0.5.8",
     "ipython>=9.4.0",
     "pytelegrambotapi>=4.27.0",
     "python-dotenv>=1.1.1",

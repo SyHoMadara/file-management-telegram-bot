@@ -17,10 +17,11 @@ ALLOWED_HOSTS = (
 
 # Application definition
 THERD_PARTY_APPS = [
-    "django_minio_backend",
+    "minio_storage",
     "celery",
     "django_celery_beat",
     "django_celery_results",
+    "django_minio_backend.apps.DjangoMinioBackendConfig",
 ]
 
 LOCLA_APPS = [
@@ -74,35 +75,43 @@ ASGI_APPLICATION = "config.asgi.application"
 
 AUTH_USER_MODEL = "account.User"
 
-# Database
+# # Database
 
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio_telegram_bot")
-# MINIO_EXTERNAL_ENDPOINT = 'localhost:9000'
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+# MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "172.19.1.2:9000")
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
 MINIO_USE_HTTPS = os.environ.get("MINIO_USE_HTTPS", "False") == "True"
-MINIO_MEDIA_FILES_BUCKET = "media"
-MINIO_STATIC_FILES_BUCKET = "static"
-MINIO_PRIVATE_BUCKETS = ["media"]
-MINIO_PUBLIC_BUCKETS = ["static"]
 MINIO_CONSISTENCY_CHECK_ON_START = False if DEBUG else True
+MINIO_PRIVATE_BUCKETS = [
+    "django-backend-dev-private",
+]
+MINIO_PUBLIC_BUCKETS = [
+    "django-backend-dev-public",
+]
+MINIO_POLICY_HOOKS: list[tuple[str, dict]] = []
+MINIO_MEDIA_FILES_BUCKET = "media"  
+MINIO_STATIC_FILES_BUCKET = "static"
+MINIO_PRIVATE_BUCKETS.append(MINIO_MEDIA_FILES_BUCKET)
+MINIO_PRIVATE_BUCKETS.append(MINIO_STATIC_FILES_BUCKET)
 MINIO_BUCKET_CHECK_ON_SAVE = True
 
-STATIC_URL = "static/"
 
 STORAGES = {
     "default": {
         "BACKEND": "django_minio_backend.models.MinioBackend",
     },
     "staticfiles": {
-        "BACKEND": "django_minio_backend.models.MinioBackendStatic",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
+DB_SQLILTE_DIR =BASE_DIR / "data" / "db"
+DB_SQLILTE_DIR
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / "data" / "db" / "db.sqlite3",
     },
 }
 
@@ -124,6 +133,57 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Logs
+LOGDIR = BASE_DIR / "data" / "logs"
+LOGDIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {name} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "file": {
+            "level": "DEBUG",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOGDIR / "app.log",
+            "maxBytes": 1024 * 1024 * 5,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "": {
+            "handlers": ["file", "console"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "django": {
+            "handlers": ["file", "console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "minio_storage": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "apps.telegram_bot.apps.TelegramBotConfig": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+}
 
 # Internationalization
 

@@ -13,4 +13,10 @@ RUN --mount=type=cache,target=/var/cache/uv \
 
 COPY . .
 
-CMD ["uv", "run", "manage.py", "runbot"]
+RUN mkdir -p /app/data/
+
+VOLUME [ "/app/data/" ]
+
+# RUN 
+
+CMD uv run manage.py migrate && uv run manage.py runbot
