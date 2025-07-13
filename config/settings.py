@@ -76,7 +76,7 @@ AUTH_USER_MODEL = "account.User"
 
 # Database
 
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "")
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio_telegram_bot")
 # MINIO_EXTERNAL_ENDPOINT = 'localhost:9000'
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")

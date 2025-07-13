@@ -8,7 +8,6 @@ services:
         - file-management-telegram-bot:latest
     image: file-management-telegram-bot:latest
     networks:
-      - local_connection
       - nat_connection
     env_file:
       - .env
@@ -21,10 +20,12 @@ services:
     environment:
       - MINIO_ACCESS_KEY_FILE={MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY_FILE={MINIO_SECRET_KEY}
+    networks:
+      - nat_connection
 
-networks: 
-  nat_connection:{}
-  local_connection:{}
+networks:
+  nat_connection:
+    driver: bridge
 
 volumes:
   minio_data:
