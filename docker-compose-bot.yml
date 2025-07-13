@@ -1,4 +1,22 @@
 services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api-local
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+    ports:
+      - "8081:8081"
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    restart: unless-stopped
+    command: >
+      telegram-bot-api 
+      --api-id=${TELEGRAM_API_ID} 
+      --api-hash=${TELEGRAM_API_HASH} 
+      --local 
+      --http-port=8081
+
   telegram-bot:
     container_name: telegram-bot
     build:
@@ -6,8 +24,11 @@ services:
       dockerfile: Dockerfile
       cache_from:
         - file-management-telegram-bot:latest
+    depends_on:
+      - telegram-bot-api
     image: file-management-telegram-bot:latest
-
+    environment:
+      - TELEGRAM_API_SERVER=http://telegram-bot-api:8081
     env_file:
       - .env
     volumes:
@@ -15,4 +36,6 @@ services:
 
 volumes:
   django-data:
+    driver: local
+  telegram-bot-api-data:
     driver: local

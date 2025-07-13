@@ -15,5 +15,5 @@ dependencies = [
     "pytelegrambotapi>=4.27.0",
     "python-dotenv>=1.1.1",
     "python-magic>=0.4.27",
-    "python-telegram-bot>=22.2",
+    "python-telegram-bot[ext]>=22.2",
 ]
