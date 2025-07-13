@@ -107,7 +107,7 @@ STORAGES = {
 }
 
 DB_SQLILTE_DIR =BASE_DIR / "data" / "db"
-DB_SQLILTE_DIR
+DB_SQLILTE_DIR.mkdir(parents=True, exist_ok=True)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
