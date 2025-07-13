@@ -11,7 +11,7 @@ services:
     image: file-management-telegram-bot:latest
     
     networks:
-      private-connectino:
+      private-connection:
         ipv4_address: "172.19.1.1"
     env_file:
       - .env
@@ -28,7 +28,7 @@ services:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
       - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
     networks:
-      private-connectino:
+      private-connection:
         ipv4_address: "172.19.1.2"
     command: server /data --console-address ":9001"
 
