@@ -77,7 +77,7 @@ AUTH_USER_MODEL = "account.User"
 
 # # Database
 
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "")
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
 MINIO_USE_HTTPS = os.environ.get("MINIO_USE_HTTPS", "False") == "True"
@@ -96,7 +96,7 @@ MINIO_PRIVATE_BUCKETS.append(MINIO_STATIC_FILES_BUCKET)
 MINIO_BUCKET_CHECK_ON_SAVE = True
 
 # External URL for MinIO accessible through nginx
-MINIO_EXTERNAL_ENDPOINT = os.environ.get("MINIO_EXTERNAL_ENDPOINT", "localhost:9000")
+MINIO_EXTERNAL_ENDPOINT = os.environ.get("MINIO_EXTERNAL_ENDPOINT", "")
 MINIO_EXTERNAL_ENDPOINT_USE_HTTPS = False
 
 
