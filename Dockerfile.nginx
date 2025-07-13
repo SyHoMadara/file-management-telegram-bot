@@ -1,7 +1,18 @@
 FROM nginx:latest
 
-RUN rm /etc/nginx/nginx.conf RUN rm -rf /etc/nginx/conf.d/*
+# Remove default nginx config and conf.d directory
+RUN rm /etc/nginx/nginx.conf && rm -rf /etc/nginx/conf.d/*
 
+# Remove the symbolic links that redirect logs to stdout/stderr
+RUN rm /var/log/nginx/access.log /var/log/nginx/error.log
+
+# Create the log directory and files
+RUN mkdir -p /var/log/nginx && \
+    touch /var/log/nginx/access.log && \
+    touch /var/log/nginx/error.log && \
+    chown -R nginx:nginx /var/log/nginx
+
+# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
 CMD ["nginx", "-g", "daemon off;"]
