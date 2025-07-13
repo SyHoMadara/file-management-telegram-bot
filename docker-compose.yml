@@ -26,7 +26,6 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
       - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
-      - MINIO_SERVER_URL=http://91.99.172.197:8880/minio
     networks:
       private-connection:
         ipv4_address: "172.19.1.2"

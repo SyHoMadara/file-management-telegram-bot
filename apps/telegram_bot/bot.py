@@ -14,6 +14,8 @@ API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 bot = telebot.TeleBot(API_TOKEN)
 logger = logging.getLogger(__name__)
 
+base_minio_url = "http://91.99.172.197:8880/minio"
+
 def creat_user_if_not_exists(user_id):
     if not User.objects.filter(username=user_id).exists():
         User.objects.create(username=user_id)
@@ -35,8 +37,8 @@ def handle_file(message):
             file_size=file_info.file_size,
             file_mime_type=message.document.mime_type,
         )
-
-        bot.reply_to(message, f"File {str(saved_file.file.url)} saved successfully!")
+        # file.url = http://minio:9000/media/files/LICENSE_omybGFC?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=O9JK85WERINQT88RV3MC%2F20250713%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250713T194534Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=d2466bb87b338cbbabe3554d410335633982574cdfe4597ba9f4d7dd8370907d
+        bot.reply_to(message, f"File {str(saved_file.file.name)} saved successfully!")
         logger.info(f"File {file_name} saved successfully for user {user_id}")
     except Exception as e:
         logger.error(f"Error saving file for user {message.from_user.id}: {str(e)}", exc_info=True)
