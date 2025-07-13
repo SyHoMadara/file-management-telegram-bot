@@ -13,10 +13,12 @@ RUN --mount=type=cache,target=/var/cache/uv \
 
 COPY . .
 
-RUN mkdir -p /app/data/
+RUN mkdir -p /app/data/logs/ /app/data/db/ /app/data/temp/
 
 VOLUME [ "/app/data/" ]
 
-# RUN 
+# Create directory for Local Bot API Server session files
+RUN mkdir -p /app/data/telegram-bot-api-sessions/
 
+# RUN 
 CMD uv run manage.py migrate && uv run manage.py runbot

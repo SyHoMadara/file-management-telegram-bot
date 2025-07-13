@@ -5,10 +5,10 @@ services:
     environment:
       - TELEGRAM_API_ID=${TELEGRAM_API_ID}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
-    ports:
-      - "8081:8081"
     volumes:
       - telegram-bot-api-data:/var/lib/telegram-bot-api
+    networks:
+      - bot-internal
     restart: unless-stopped
     command: >
       telegram-bot-api 
@@ -33,6 +33,14 @@ services:
       - .env
     volumes:
       - django-data:/app/data/
+    networks:
+      - bot-internal
+    restart: unless-stopped
+
+networks:
+  bot-internal:
+    driver: bridge
+    internal: false
 
 volumes:
   django-data:
