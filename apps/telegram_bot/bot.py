@@ -15,7 +15,7 @@ API_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
 bot = telebot.TeleBot(API_TOKEN)
 logger = logging.getLogger(__name__)
 
-base_minio_url = "http://"+ os.environ.get("MINIO_EXTERNAL_ENDPOINT", "") + "minio"
+base_minio_url = "http://"+ os.environ.get("MINIO_EXTERNAL_ENDPOINT", "") + "/minio"
 
 def creat_user_if_not_exists(user_id):
     if not User.objects.filter(username=user_id).exists():
