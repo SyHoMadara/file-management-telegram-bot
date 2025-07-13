@@ -45,7 +45,7 @@ def handle_file(message):
         logger.info(f"File {file_name} saved successfully for user {user_id}")
     except Exception as e:
         logger.error(f"Error saving file for user {message.from_user.id}: {str(e)}", exc_info=True)
-        bot.reply_to(message, f"Error saving file: {str(e)}")
+        bot.reply_to(message, f"Internal server error saving file")
 
 
 @bot.message_handler(commands=["start"])
