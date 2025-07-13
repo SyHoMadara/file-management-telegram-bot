@@ -40,7 +40,7 @@ def handle_file(message):
         )
         full_url = saved_file.file.url
         parsed_url = urlsplit(full_url)
-        relative_path = parsed_url.path.lstrip('/')
+        relative_path = parsed_url.path.lstrip('/') + '?' + parsed_url.query
         bot.reply_to(message, f"File {base_minio_url}/{relative_path} saved successfully!")
         logger.info(f"File {file_name} saved successfully for user {user_id}")
     except Exception as e:
