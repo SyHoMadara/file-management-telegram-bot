@@ -1,22 +1,4 @@
 services:
-  telegram-bot-api:
-    image: aiogram/telegram-bot-api:latest
-    container_name: telegram-bot-api-local
-    environment:
-      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
-      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
-    volumes:
-      - telegram-bot-api-data:/var/lib/telegram-bot-api
-    networks:
-      - bot-internal
-    restart: unless-stopped
-    command: >
-      telegram-bot-api 
-      --api-id=${TELEGRAM_API_ID} 
-      --api-hash=${TELEGRAM_API_HASH} 
-      --local 
-      --http-port=8081
-      --http-stat-port=8082
   telegram-bot:
     container_name: telegram-bot
     build:
@@ -34,17 +16,8 @@ services:
       - ./apps:/app/apps/:ro
       - ./apps/config:/app/apps/config/:ro
       - django-data:/app/data/
-    networks:
-      - bot-internal
     restart: unless-stopped
-
-networks:
-  bot-internal:
-    driver: bridge
-    internal: false
 
 volumes:
   django-data:
-    driver: local
-  telegram-bot-api-data:
     driver: local
