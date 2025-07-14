@@ -3,9 +3,14 @@ import logging
 import os
 
 from pyrogram import Client, filters
-from pyrogram.handlers import MessageHandler
+from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 
-from apps.telegram_bot.handlers.commons import help_command, start_command
+from apps.telegram_bot.handlers.commons import (
+    help_command,
+    start_command,
+    language_command,
+    language_callback,
+)
 from apps.telegram_bot.handlers.documents import handle_document
 from config.settings import BASE_DIR
 
@@ -42,7 +47,13 @@ async def start_local_bot_async():
     # Register handlers
     app.add_handler(MessageHandler(start_command, filters.command("start")))
     app.add_handler(MessageHandler(help_command, filters.command("help")))
+    app.add_handler(
+        MessageHandler(
+            language_command, filters.command("lang") | filters.command("language")
+        )
+    )
     app.add_handler(MessageHandler(handle_document, filters.document))
+    app.add_handler(CallbackQueryHandler(language_callback, filters.regex("^lang_")))
 
     logger.info("✅ Bot handlers registered successfully")
     logger.info("🔄 Starting bot...")

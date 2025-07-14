@@ -1,0 +1,164 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: File Management Telegram Bot\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-07-14 19:16+0330\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: apps/account/models.py:36
+msgid "username"
+msgstr ""
+
+#: apps/account/models.py:38
+msgid ""
+"Required. 150 characters or fewer. Letters, digits and @/._/+/- characters"
+msgstr ""
+
+#: apps/account/models.py:43
+msgid "is verified"
+msgstr ""
+
+#: apps/account/models.py:44
+msgid "Designates whether this user has verified their email address."
+msgstr ""
+
+#: apps/account/models.py:48
+msgid "date update"
+msgstr ""
+
+#: apps/account/models.py:52
+msgid "date create"
+msgstr ""
+
+#: apps/account/models.py:56
+msgid "is active"
+msgstr ""
+
+#: apps/account/models.py:58
+msgid ""
+"Designates whether this user should be treated as active. Unselect this "
+"instead of deleting accounts."
+msgstr ""
+
+#: apps/account/models.py:63
+msgid "is staff"
+msgstr ""
+
+#: apps/account/models.py:64
+msgid "Designates whether the user can log into this admin site."
+msgstr ""
+
+#: apps/account/models.py:68
+msgid "is superuser"
+msgstr ""
+
+#: apps/account/models.py:70
+msgid ""
+"Designates that this user has all permissions without explicitly assigning "
+"them."
+msgstr ""
+
+#: apps/account/models.py:78
+msgid "user"
+msgstr ""
+
+#: apps/account/models.py:79
+msgid "users"
+msgstr ""
+
+#: apps/telegram_bot/handlers/commons.py:18
+#, python-format
+msgid ""
+"🤖 Large File Storage Bot!\n"
+"\n"
+"📁 Send me any file and I'll store it.\n"
+"\n"
+"💡 Features:\n"
+"• Files up to 2GB (2048MB)\n"
+"• Fast downloads via local server\n"
+"• Direct storage to MinIO\n"
+"\n"
+"⚠️ Rate Limits:\n"
+"• Max %(max_requests)d files per minute per user\n"
+"• Max %(max_downloads)d downloads at once\n"
+"\n"
+"Just send a file to get started! 📤"
+msgstr ""
+"🤖 Large File Storage Bot!\n"
+"\n"
+"📁 Send me any file and I'll store it.\n"
+"\n"
+"💡 Features:\n"
+"• Files up to 2GB (2048MB)\n"
+"• Fast downloads via local server\n"
+"• Direct storage to MinIO\n"
+"\n"
+"⚠️ Rate Limits:\n"
+"• Max %(max_requests)d files per minute per user\n"
+"• Max %(max_downloads)d downloads at once\n"
+"\n"
+"Just send a file to get started! 📤"
+
+#: apps/telegram_bot/handlers/commons.py:39
+#, python-format
+msgid ""
+"🆘 Help - Large File Storage Bot\n"
+"\n"
+"📋 Available Commands:\n"
+"• /start - Show welcome message\n"
+"• /help - Show this help message\n"
+"\n"
+"📤 How to use:\n"
+"1. Simply send any document to the bot\n"
+"2. Wait for the upload to complete\n"
+"3. Get your download URL\n"
+"\n"
+"📏 File Limits:\n"
+"• Maximum file size: 2GB (2048MB)\n"
+"• Rate limit: %(max_requests)d files per minute\n"
+"• Concurrent uploads: %(max_downloads)d\n"
+"\n"
+"🔧 Supported file types:\n"
+"• Documents, archives, videos, images\n"
+"• Any file type up to 2GB\n"
+"\n"
+"❓ Having issues?\n"
+"• Make sure your file is under 2GB\n"
+"• Wait between uploads if rate limited\n"
+"• Try again if upload fails"
+msgstr ""
+"🆘 Help - Large File Storage Bot\n"
+"\n"
+"📋 Available Commands:\n"
+"• /start - Show welcome message\n"
+"• /help - Show this help message\n"
+"\n"
+"📤 How to use:\n"
+"1. Simply send any document to the bot\n"
+"2. Wait for the upload to complete\n"
+"3. Get your download URL\n"
+"\n"
+"📏 File Limits:\n"
+"• Maximum file size: 2GB (2048MB)\n"
+"• Rate limit: %(max_requests)d files per minute\n"
+"• Concurrent uploads: %(max_downloads)d\n"
+"\n"
+"🔧 Supported file types:\n"
+"• Documents, archives, videos, images\n"
+"• Any file type up to 2GB\n"
+"\n"
+"❓ Having issues?\n"
+"• Make sure your file is under 2GB\n"
+"• Wait between uploads if rate limited\n"
+"• Try again if upload fails"

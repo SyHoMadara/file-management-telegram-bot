@@ -42,11 +42,14 @@ DEFAULT_APPS = [
 
 INSTALLED_APPS = THERD_PARTY_APPS + DEFAULT_APPS + LOCLA_APPS
 
-LOCAL_MIDELWARE = []
+LOCAL_MIDELWARE = [
+    "django.middleware.locale.LocaleMiddleware",
+]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.locale.LocaleMiddleware",  # Add this for i18n support
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -141,6 +144,14 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGDIR = BASE_DIR / "data" / "logs"
 LOGDIR.mkdir(parents=True, exist_ok=True)
 
+# Ensure the log file can be created
+LOG_FILE = LOGDIR / "app.log"
+try:
+    LOG_FILE.touch(exist_ok=True)
+except (PermissionError, OSError):
+    # Fallback to a simpler logging setup if file creation fails
+    LOG_FILE = None
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -149,56 +160,87 @@ LOGGING = {
             "format": "{levelname} {name} {asctime} {module} {message}",
             "style": "{",
         },
+        "simple": {
+            "format": "{levelname} {name} {asctime} {message}",
+            "style": "{",
+        },
     },
     "handlers": {
-        "file": {
-            "level": "DEBUG",
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOGDIR / "app.log",
-            "maxBytes": 1024 * 1024 * 5,
-            "backupCount": 5,
-            "formatter": "verbose",
-        },
         "console": {
             "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
     },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
     "loggers": {
-        "": {
-            "handlers": ["file", "console"],
-            "level": "INFO",
-            "propagate": True,
-        },
         "django": {
-            "handlers": ["file", "console"],
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
         "minio_storage": {
-            "handlers": ["console", "file"],
-            "level": "DEBUG",
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": False,
         },
-        "apps.telegram_bot.apps.TelegramBotConfig": {
-            "handlers": ["console", "file"],
-            "level": "DEBUG",
+        "apps.telegram_bot": {
+            "handlers": ["console"],
+            "level": "INFO",  # Changed to DEBUG for better bot logging
+            "propagate": False,
+        },
+        "pyrogram": {
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": False,
         },
     },
 }
 
+# Add file handler only if we can create the log file
+if LOG_FILE:
+    LOGGING["handlers"]["file"] = {
+        "level": "DEBUG",
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": str(LOG_FILE),
+        "maxBytes": 1024 * 1024 * 5,
+        "backupCount": 5,
+        "formatter": "verbose",
+    }
+    # Add file handler to all loggers
+    for logger_config in LOGGING["loggers"].values():
+        if "file" not in logger_config["handlers"]:
+            logger_config["handlers"].append("file")
+    LOGGING["root"]["handlers"].append("file")
+
 # Internationalization
 
 LANGUAGE_CODE = os.environ.get("DJANGO_LANGUAGE_CODE", "en-us")
+
+LANGUAGES = [
+    ("en", "English"),
+    ("fa", "Persian"),
+    # Add more languages as needed
+]
+
+LOCALE_PATHS = [
+    BASE_DIR / "apps" / "telegram_bot" / "locale",
+]
 
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "Asia/Tehran")
 
 USE_I18N = True
 
+USE_L10N = True
+
 USE_TZ = True
 
+# Add these for better Pyrogram support
+PYROGRAM_SESSION_DIR = BASE_DIR / "data" / "pyrogram"
+PYROGRAM_SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # Default primary key field type
 
