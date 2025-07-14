@@ -284,7 +284,7 @@ async def check_local_api_server():
         logger.error(f"   Check your TELEGRAM_API_ID and TELEGRAM_API_HASH configuration")
         return False
 
-async def start_local_bot():
+def start_local_bot():
     """Start the bot with Local Bot API Server"""
     if not BOT_TOKEN:
         raise ValueError("❌ TELEGRAM_BOT_API_TOKEN must be set in .env file")
