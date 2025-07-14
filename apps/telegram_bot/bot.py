@@ -2,6 +2,7 @@ import os
 import logging
 import tempfile
 import asyncio
+import aiohttp
 from pathlib import Path
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -116,12 +117,20 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_size = document.file_size
         max_size = 2 * 1024 * 1024 * 1024  # 2GB limit for Local Bot API
         
+        # Log file details for debugging
+        logger.info(f"Processing file: {document.file_name}, Size: {file_size} bytes ({file_size/(1024*1024):.2f} MB)")
+        
         if file_size > max_size:
             size_gb = file_size / (1024 * 1024 * 1024)
             await update.message.reply_text(
                 f"❌ File too large ({size_gb:.1f}GB). Maximum file size is 2GB."
             )
             return
+        
+        # Check if file might be too big for standard Bot API (20MB)
+        standard_limit = 20 * 1024 * 1024  # 20MB
+        if file_size > standard_limit:
+            logger.warning(f"File {document.file_name} ({file_size/(1024*1024):.2f}MB) exceeds standard Bot API limit (20MB). Requires Local Bot API Server.")
         
         # Send progress message
         size_mb = file_size / (1024 * 1024)
@@ -144,7 +153,34 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         CONCURRENT_DOWNLOADS += 1
         try:
             # Get file from Local Bot API Server
-            file = await context.bot.get_file(document.file_id)
+            try:
+                file = await context.bot.get_file(document.file_id)
+            except Exception as e:
+                if "File is too big" in str(e):
+                    await progress_msg.edit_text(
+                        f"❌ File download failed!\n"
+                        f"📁 Name: {document.file_name}\n"
+                        f"📊 Size: {size_mb:.2f} MB\n\n"
+                        f"🚨 Error: File too big for current API configuration\n\n"
+                        f"💡 Troubleshooting:\n"
+                        f"1. Check if Local Bot API Server is running:\n"
+                        f"   `docker-compose -f docker-compose-bot.yml ps`\n"
+                        f"2. Check API server logs:\n"
+                        f"   `docker-compose -f docker-compose-bot.yml logs telegram-bot-api`\n"
+                        f"3. Verify API credentials in .env:\n"
+                        f"   - TELEGRAM_API_ID\n"
+                        f"   - TELEGRAM_API_HASH\n"
+                        f"4. Standard Bot API limit: 20MB\n"
+                        f"   Local Bot API limit: 2GB\n\n"
+                        f"� Current API Server: {API_SERVER}"
+                    )
+                    logger.error(f"File too big error for {document.file_name} ({size_mb:.2f}MB).")
+                    logger.error(f"This suggests Local Bot API Server is not working properly.")
+                    logger.error(f"API Server: {API_SERVER}")
+                    logger.error(f"File size: {file_size} bytes ({size_mb:.2f} MB)")
+                    return
+                else:
+                    raise e
             
             # Create temporary file for streaming download
             temp_dir = Path(BASE_DIR) / "data" / "temp"
@@ -221,7 +257,35 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Just send a file to get started! 📤"
     )
 
-def start_local_bot():
+async def check_local_api_server():
+    """Check if Local Bot API Server is working properly"""
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            # Check if the API server is responding
+            test_url = f"{API_SERVER}/bot{BOT_TOKEN}/getMe"
+            async with session.get(test_url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get('ok'):
+                        logger.info("✅ Local Bot API Server is responding correctly")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Local Bot API Server responded but with error: {data}")
+                        return False
+                else:
+                    logger.warning(f"⚠️ Local Bot API Server returned status {response.status}")
+                    return False
+    except ImportError:
+        logger.warning("⚠️ aiohttp not available, skipping API server check")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Local Bot API Server: {e}")
+        logger.error(f"   Make sure the API server is running at: {API_SERVER}")
+        logger.error(f"   Check your TELEGRAM_API_ID and TELEGRAM_API_HASH configuration")
+        return False
+
+async def start_local_bot():
     """Start the bot with Local Bot API Server"""
     if not BOT_TOKEN:
         raise ValueError("❌ TELEGRAM_BOT_API_TOKEN must be set in .env file")
@@ -242,6 +306,19 @@ def start_local_bot():
     logger.info(f"🌐 API Server: {API_SERVER}")
     logger.info(f"📦 MinIO URL: {base_minio_url}")
     logger.info(f"⚡ Rate limits: {MAX_REQUESTS_PER_MINUTE} files/min per user, {MAX_CONCURRENT_DOWNLOADS} concurrent downloads")
+    
+    # Check Local Bot API Server connectivity
+    logger.info("🔍 Checking Local Bot API Server connectivity...")
+    api_check = await check_local_api_server()
+    if api_check is False:
+        logger.error("❌ Local Bot API Server check failed!")
+        logger.error("   Large file downloads (>20MB) may not work properly")
+        logger.error("   Standard Bot API limit: 20MB, Local Bot API limit: 2GB")
+        logger.error("   Please check your docker-compose setup and API credentials")
+    elif api_check is True:
+        logger.info("✅ Local Bot API Server is working - large files up to 2GB supported!")
+    else:
+        logger.info("⚠️ Could not verify Local Bot API Server status")
     
     # Create bot instance with custom API server
     bot = Bot(token=BOT_TOKEN, base_url=f"{API_SERVER}/bot")
