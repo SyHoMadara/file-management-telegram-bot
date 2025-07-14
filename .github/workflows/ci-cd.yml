@@ -28,3 +28,4 @@ jobs:
           git pull origin main
           # Run docker-compose up --build -d
           docker-compose -f docker-compose-bot.yml up --build -d
+# starttttt
