@@ -16,6 +16,7 @@ services:
       --api-hash=${TELEGRAM_API_HASH} 
       --local 
       --http-port=8081
+      --http-stat-port=8082
 
   telegram-bot:
     container_name: telegram-bot

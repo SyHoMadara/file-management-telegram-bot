@@ -154,6 +154,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Get file from Local Bot API Server
             try:
                 file = await context.bot.get_file(document.file_id)
+                logger.info(f"File info received: path={file.file_path}, size={file.file_size}")
             except Exception as e:
                 if "File is too big" in str(e):
                     await progress_msg.edit_text(
@@ -213,8 +214,27 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Download file directly to disk (streaming)
                 try:
-                    await file.download_to_drive(temp_file_path)
-                    logger.info(f"File downloaded to temporary location: {temp_file_path}")
+                    # Use Local Bot API Server for downloading
+                    download_url = f"{API_SERVER}/file/bot{BOT_TOKEN}/{file.file_path}"
+                    logger.info(f"Downloading from Local Bot API: {download_url}")
+                    
+                    # Download using aiohttp to ensure we use Local Bot API Server
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(download_url) as response:
+                                if response.status == 200:
+                                    with open(temp_file_path, 'wb') as f:
+                                        async for chunk in response.content.iter_chunked(8192):
+                                            f.write(chunk)
+                                    logger.info(f"File downloaded to temporary location: {temp_file_path}")
+                                else:
+                                    raise Exception(f"Download failed with status {response.status}")
+                    except ImportError:
+                        # Fallback to standard download (may not work for large files)
+                        logger.warning("aiohttp not available, using standard download method")
+                        await file.download_to_drive(temp_file_path)
+                        logger.info(f"File downloaded to temporary location: {temp_file_path}")
                 except Exception as download_error:
                     if "Not Found" in str(download_error) or "InvalidToken" in str(download_error):
                         await progress_msg.edit_text(
