@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -89,7 +90,7 @@ MINIO_PUBLIC_BUCKETS = [
     "django-backend-dev-public",
 ]
 MINIO_POLICY_HOOKS: list[tuple[str, dict]] = []
-MINIO_MEDIA_FILES_BUCKET = "media"  
+MINIO_MEDIA_FILES_BUCKET = "media"
 MINIO_STATIC_FILES_BUCKET = "static"
 MINIO_PRIVATE_BUCKETS.append(MINIO_MEDIA_FILES_BUCKET)
 MINIO_PRIVATE_BUCKETS.append(MINIO_STATIC_FILES_BUCKET)
@@ -109,7 +110,7 @@ STORAGES = {
     },
 }
 
-DB_SQLILTE_DIR =BASE_DIR / "data" / "db"
+DB_SQLILTE_DIR = BASE_DIR / "data" / "db"
 DB_SQLILTE_DIR.mkdir(parents=True, exist_ok=True)
 DATABASES = {
     "default": {

@@ -7,7 +7,9 @@ class Command(BaseCommand):
     help = "Run the Telegram bot with Local Bot API Server (supports files up to 2GB)"
 
     def handle(self, *args, **kwargs):
-        self.stdout.write(self.style.SUCCESS("Starting bot with Local Bot API Server..."))
+        self.stdout.write(
+            self.style.SUCCESS("Starting bot with Local Bot API Server...")
+        )
         try:
             start_local_bot()
         except KeyboardInterrupt:
