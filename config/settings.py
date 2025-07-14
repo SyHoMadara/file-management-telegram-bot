@@ -106,7 +106,7 @@ MINIO_EXTERNAL_ENDPOINT_USE_HTTPS = False
 
 STORAGES = {
     "default": {
-        "BACKEND": "apps.file_manager.storage.CustomMinioBackend",
+        "BACKEND": "apps.file_manager.storage.DispositionMinioBackend",
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
