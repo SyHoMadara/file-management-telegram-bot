@@ -106,12 +106,13 @@ MINIO_EXTERNAL_ENDPOINT_USE_HTTPS = False
 
 STORAGES = {
     "default": {
-        "BACKEND": "apps.file_manager.backend.DispositionMinioBackend",
+        "BACKEND": "apps.file_manager.storage.CustomMinioBackend",
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
+
 
 DB_SQLILTE_DIR = BASE_DIR / "data" / "db"
 DB_SQLILTE_DIR.mkdir(parents=True, exist_ok=True)
