@@ -21,4 +21,4 @@ VOLUME [ "/app/data/" ]
 RUN mkdir -p /app/data/telegram-bot-api-sessions/
 
 # RUN 
-CMD uv run manage.py migrate && uv run manage.py runbot
+CMD uv run manage.py migrate && uv run manage.py runbot --reload

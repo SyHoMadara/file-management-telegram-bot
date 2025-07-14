@@ -161,7 +161,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔄 Please try again in a moment."
             )
             return
-
+        # TODO add celery for downloads
         CONCURRENT_DOWNLOADS += 1
         try:
             # Get file from Local Bot API Server
@@ -237,69 +237,45 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # Download file directly to disk (streaming)
                 try:
-                    # Use Local Bot API Server for downloading
-                    download_url = f"{API_SERVER}/file/bot{BOT_TOKEN}/{file.file_path}"
-                    logger.info(f"Downloading from Local Bot API: {download_url}")
+                    # Use the telegram library's built-in download method
+                    # This handles Local Bot API Server automatically
+                    logger.info(f"Downloading file using telegram library method")
+                    logger.info(
+                        f"File path: {file.file_path}, File size: {file.file_size}"
+                    )
 
-                    # Download using aiohttp to ensure we use Local Bot API Server
-                    try:
-                        import aiohttp
+                    # Download the file directly to the temp location
+                    await file.download_to_drive(temp_file_path)
 
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(download_url) as response:
-                                if response.status == 200:
-                                    with open(temp_file_path, "wb") as f:
-                                        async for (
-                                            chunk
-                                        ) in response.content.iter_chunked(8192):
-                                            f.write(chunk)
-                                    logger.info(
-                                        f"File downloaded to temporary location: {temp_file_path}"
-                                    )
-                                else:
-                                    raise Exception(
-                                        f"Download failed with status {response.status}"
-                                    )
-                    except ImportError:
-                        # Fallback to standard download (may not work for large files)
-                        logger.warning(
-                            "aiohttp not available, using standard download method"
-                        )
-                        await file.download_to_drive(temp_file_path)
-                        logger.info(
-                            f"File downloaded to temporary location: {temp_file_path}"
-                        )
+                    logger.info(
+                        f"File downloaded to temporary location: {temp_file_path}"
+                    )
+
                 except Exception as download_error:
-                    if "Not Found" in str(download_error) or "InvalidToken" in str(
-                        download_error
-                    ):
-                        await progress_msg.edit_text(
-                            f"❌ Download failed!\n"
-                            f"📁 Name: {document.file_name}\n"
-                            f"📊 Size: {size_mb:.2f} MB\n\n"
-                            f"🚨 Error: Cannot download file from Local Bot API Server\n\n"
-                            f"💡 This usually means:\n"
-                            f"• Local Bot API Server is not running\n"
-                            f"• API credentials are incorrect\n"
-                            f"• File expired or not accessible\n\n"
-                            f"🔧 Check docker logs:\n"
-                            f"`docker-compose -f docker-compose-bot.yml logs telegram-bot-api`\n\n"
-                            f"📝 Error: {str(download_error)}"
-                        )
-                        logger.error(
-                            f"Download failed for {document.file_name}: {str(download_error)}"
-                        )
-                        logger.error(
-                            "Local Bot API Server appears to be misconfigured or not running"
-                        )
-                        # Clean up the temp file if it was created
-                        try:
-                            os.unlink(temp_file_path)
-                        except Exception:
-                            pass
-                        return
-                    else:
-                        raise download_error
+                    logger.error(
+                        f"Download failed for {document.file_name}: {str(download_error)}"
+                    )
+                    logger.error(
+                        "This might indicate Local Bot API Server issues or file access problems"
+                    )
+                    await progress_msg.edit_text(
+                        f"❌ File download failed!\n"
+                        f"📁 Name: {document.file_name}\n"
+                        f"📊 Size: {size_mb:.2f} MB\n\n"
+                        f"🚨 Error: {str(download_error)}\n\n"
+                        f"💡 Possible causes:\n"
+                        f"• Local Bot API Server not properly configured\n"
+                        f"• File too large for current setup\n"
+                        f"• Network connectivity issues\n\n"
+                        f"🔧 Check logs:\n"
+                        f"`docker-compose -f docker-compose-bot.yml logs telegram-bot-api`"
+                    )
+                    # Clean up the temp file if it was created
+                    try:
+                        os.unlink(temp_file_path)
+                    except Exception:
+                        pass
+                    return
 
             # Update progress
             await progress_msg.edit_text(
@@ -409,8 +385,8 @@ async def check_local_api_server():
         return False
 
 
-def start_local_bot():
-    """Start the bot with Local Bot API Server"""
+async def start_local_bot_async():
+    """Start the bot with Local Bot API Server - async version"""
     if not BOT_TOKEN:
         raise ValueError("❌ TELEGRAM_BOT_API_TOKEN must be set in .env file")
 
@@ -433,7 +409,7 @@ def start_local_bot():
         f"⚡ Rate limits: {MAX_REQUESTS_PER_MINUTE} files/min per user, {MAX_CONCURRENT_DOWNLOADS} concurrent downloads"
     )
 
-    # Check Local Bot API Server connectivity (run in background)
+    # Check Local Bot API Server connectivity
     async def check_and_log_api_server():
         logger.info("🔍 Checking Local Bot API Server connectivity...")
         api_check = await check_local_api_server()
@@ -470,5 +446,55 @@ def start_local_bot():
     logger.info("✅ Bot handlers registered successfully")
     logger.info("🔄 Starting bot polling...")
 
-    # Start the bot
-    application.run_polling(drop_pending_updates=True)
+    # Initialize and start the application
+    await application.initialize()
+    await application.post_init(application)
+    await application.start()
+
+    # Start polling
+    await application.updater.start_polling(drop_pending_updates=True)
+
+    # Keep running until stopped
+    try:
+        # Run forever
+        import asyncio
+
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopping...")
+    finally:
+        # Clean shutdown
+        await application.stop()
+        await application.shutdown()
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+
+    # Add post-init hook to check API server
+    async def post_init(application):
+        await check_and_log_api_server()
+
+    application.post_init = post_init
+
+    logger.info("✅ Bot handlers registered successfully")
+    logger.info("🔄 Starting bot polling...")
+
+    # Initialize and start the application
+    await application.initialize()
+    await application.post_init(application)
+    await application.start()
+
+    # Start polling
+    await application.updater.start_polling(drop_pending_updates=True)
+
+    # Keep running until stopped
+    try:
+        # Run forever
+        import asyncio
+
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopping...")
+    finally:
+        # Clean shutdown
+        await application.stop()
+        await application.shutdown()
