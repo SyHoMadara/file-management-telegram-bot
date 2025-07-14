@@ -33,6 +33,9 @@ services:
     env_file:
       - .env
     volumes:
+    # todo isolate this
+      - ./apps:/app/apps/:ro
+      - ./apps/config:/app/apps/config/:ro
       - django-data:/app/data/
     networks:
       - bot-internal

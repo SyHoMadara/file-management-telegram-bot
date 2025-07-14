@@ -15,7 +15,7 @@ COPY . .
 
 RUN mkdir -p /app/data/logs/ /app/data/db/ /app/data/temp/
 
-VOLUME [ "/app/data/" ]
+VOLUME [ "/app/data/" , "app/apps/", "app/apps/config/"]
 
 # Create directory for Local Bot API Server session files
 RUN mkdir -p /app/data/telegram-bot-api-sessions/

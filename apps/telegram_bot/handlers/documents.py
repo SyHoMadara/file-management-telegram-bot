@@ -98,7 +98,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 file = await context.bot.get_file(document.file_id)
                 logger.info(
-                    f"File info received: path={file.file_path}, size={file.file_size}"
+                    f"File info received: path={file.file_path}, size={file.file_size}, file_id={document.file_id}"
                 )
             except Exception as e:
                 logger.error(f"Failed to get file info: {str(e)}")
@@ -106,11 +106,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"❌ File access failed!\n"
                     f"📁 Name: {document.file_name}\n"
                     f"📊 Size: {size_mb:.2f} MB\n\n"
-                    f"🚨 Error: {str(e)}\n\n"
-                    f"💡 This might indicate:\n"
-                    f"• Local Bot API Server issues\n"
-                    f"• File too large for current setup\n"
-                    f"• Network connectivity problems"
                 )
                 return
 
@@ -128,6 +123,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.info("Downloading file using telegram library method")
                     logger.info(
                         f"File path: {file.file_path}, File size: {file.file_size}"
+                    )
+                    await progress_msg.edit_text(
+                        "📥 Downloading file ...\n"
                     )
 
                     # Download the file directly to the temp location
@@ -148,13 +146,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"❌ File download failed!\n"
                         f"📁 Name: {document.file_name}\n"
                         f"📊 Size: {size_mb:.2f} MB\n\n"
-                        f"🚨 Error: {str(download_error)}\n\n"
-                        f"💡 Possible causes:\n"
-                        f"• Local Bot API Server not properly configured\n"
-                        f"• File too large for current setup\n"
-                        f"• Network connectivity issues\n\n"
-                        f"🔧 Check logs:\n"
-                        f"`docker-compose -f docker-compose-bot.yml logs telegram-bot-api`"
                     )
                     # Clean up the temp file if it was created
                     try:
