@@ -2,7 +2,6 @@ import os
 import logging
 import tempfile
 import asyncio
-import aiohttp
 from pathlib import Path
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -307,18 +306,19 @@ async def start_local_bot():
     logger.info(f"📦 MinIO URL: {base_minio_url}")
     logger.info(f"⚡ Rate limits: {MAX_REQUESTS_PER_MINUTE} files/min per user, {MAX_CONCURRENT_DOWNLOADS} concurrent downloads")
     
-    # Check Local Bot API Server connectivity
-    logger.info("🔍 Checking Local Bot API Server connectivity...")
-    api_check = await check_local_api_server()
-    if api_check is False:
-        logger.error("❌ Local Bot API Server check failed!")
-        logger.error("   Large file downloads (>20MB) may not work properly")
-        logger.error("   Standard Bot API limit: 20MB, Local Bot API limit: 2GB")
-        logger.error("   Please check your docker-compose setup and API credentials")
-    elif api_check is True:
-        logger.info("✅ Local Bot API Server is working - large files up to 2GB supported!")
-    else:
-        logger.info("⚠️ Could not verify Local Bot API Server status")
+    # Check Local Bot API Server connectivity (run in background)
+    async def check_and_log_api_server():
+        logger.info("🔍 Checking Local Bot API Server connectivity...")
+        api_check = await check_local_api_server()
+        if api_check is False:
+            logger.error("❌ Local Bot API Server check failed!")
+            logger.error("   Large file downloads (>20MB) may not work properly")
+            logger.error("   Standard Bot API limit: 20MB, Local Bot API limit: 2GB")
+            logger.error("   Please check your docker-compose setup and API credentials")
+        elif api_check is True:
+            logger.info("✅ Local Bot API Server is working - large files up to 2GB supported!")
+        else:
+            logger.info("⚠️ Could not verify Local Bot API Server status")
     
     # Create bot instance with custom API server
     bot = Bot(token=BOT_TOKEN, base_url=f"{API_SERVER}/bot")
@@ -329,6 +329,12 @@ async def start_local_bot():
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    
+    # Add post-init hook to check API server
+    async def post_init(application):
+        await check_and_log_api_server()
+    
+    application.post_init = post_init
     
     logger.info("✅ Bot handlers registered successfully")
     logger.info("🔄 Starting bot polling...")

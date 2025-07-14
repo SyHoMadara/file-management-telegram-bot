@@ -1,4 +1,3 @@
-import asyncio
 from django.core.management.base import BaseCommand
 
 from apps.telegram_bot.bot import start_local_bot
@@ -10,7 +9,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.SUCCESS("Starting bot with Local Bot API Server..."))
         try:
-            asyncio.run(start_local_bot())
+            start_local_bot()
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING("Bot stopped by user"))
         except Exception as e:
