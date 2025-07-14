@@ -17,7 +17,6 @@ services:
       --local 
       --http-port=8081
       --http-stat-port=8082
-
   telegram-bot:
     container_name: telegram-bot
     build:
@@ -28,12 +27,10 @@ services:
     depends_on:
       - telegram-bot-api
     image: file-management-telegram-bot:latest
-    environment:
-      - TELEGRAM_API_SERVER=http://telegram-bot-api:8081
     env_file:
       - .env
     volumes:
-    # todo isolate this
+      # todo isolate this
       - ./apps:/app/apps/:ro
       - ./apps/config:/app/apps/config/:ro
       - django-data:/app/data/

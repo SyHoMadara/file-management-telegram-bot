@@ -12,9 +12,10 @@ dependencies = [
     "django-celery-results>=2.6.0",
     "django-minio-backend>=3.8.0",
     "django-minio-storage>=0.5.8",
+    "dotenv>=0.9.9",
     "ipython>=9.4.0",
-    "pytelegrambotapi>=4.27.0",
+    "pyrogram>=2.0.106",
     "python-dotenv>=1.1.1",
     "python-magic>=0.4.27",
-    "python-telegram-bot[ext]>=22.2",
+    "tgcrypto>=1.2.5",
 ]

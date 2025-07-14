@@ -5,6 +5,10 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY uv.lock .
 
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt update && \    
+    apt install -y gcc
+
 RUN --mount=type=cache,target=/var/cache/pip \
     pip install --cache-dir /var/cache/pip uv
 
@@ -13,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/uv \
 
 COPY . .
 
-RUN mkdir -p /app/data/logs/ /app/data/db/ /app/data/temp/
+RUN mkdir -p /app/data/logs/ /app/data/db/ /app/data/temp/ /app/data/pyrogram/
 
 VOLUME [ "/app/data/" , "app/apps/", "app/apps/config/"]
 

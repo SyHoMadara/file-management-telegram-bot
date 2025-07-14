@@ -1,11 +1,12 @@
 import logging
 import os
 import tempfile
+from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from telegram import Update
-from telegram.ext import ContextTypes
+from pyrogram import Client
+from pyrogram.types import Message
 
 from apps.telegram_bot.utils.utils import (
     create_user_if_not_exists,
@@ -18,7 +19,7 @@ from config.settings import BASE_DIR
 logger = logging.getLogger(__name__)
 
 # Rate limiting setup - Adjust these for production
-
+user_request_times = defaultdict(deque)
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("BOT_MAX_REQUESTS_PER_MINUTE", "5"))
 CONCURRENT_DOWNLOADS = 0
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("BOT_MAX_CONCURRENT_DOWNLOADS", "3"))
@@ -27,15 +28,15 @@ MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("BOT_MAX_CONCURRENT_DOWNLOADS", "3
 base_minio_url = "http://" + os.environ.get("MINIO_EXTERNAL_ENDPOINT", "")
 
 
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle document uploads with Local Bot API Server (supports up to 2GB)"""
+async def handle_document(client: Client, message: Message):
+    """Handle document uploads with Pyrogram and Local Bot API Server (supports up to 2GB)"""
     global CONCURRENT_DOWNLOADS
 
-    user_id = update.effective_user.id
+    user_id = message.from_user.id
 
     # Check rate limit
     if is_rate_limited(user_id):
-        await update.message.reply_text(
+        await message.reply_text(
             "⚠️ Rate limit exceeded!\n"
             f"📊 You can upload max {MAX_REQUESTS_PER_MINUTE} files per minute.\n"
             "⏳ Please wait before sending another file."
@@ -43,7 +44,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        document = update.message.document
+        document = message.document
+        if not document:
+            await message.reply_text("❌ No document found in the message.")
+            return
 
         # Create user if not exists
         user_created = await create_user_if_not_exists(user_id)
@@ -61,7 +65,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if file_size > max_size:
             size_gb = file_size / (1024 * 1024 * 1024)
-            await update.message.reply_text(
+            await message.reply_text(
                 f"❌ File too large ({size_gb:.1f}GB). Maximum file size is 2GB."
             )
             return
@@ -70,12 +74,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         standard_limit = 20 * 1024 * 1024  # 20MB
         if file_size > standard_limit:
             logger.warning(
-                f"File {document.file_name} ({file_size / (1024 * 1024):.2f}MB) exceeds standard Bot API limit (20MB). Requires Local Bot API Server."
+                f"File {document.file_name} ({file_size / (1024 * 1024):.2f}MB) exceeds standard Bot API limit (20MB). Using Local Bot API Server."
             )
 
         # Send progress message
         size_mb = file_size / (1024 * 1024)
-        progress_msg = await update.message.reply_text(
+        progress_msg = await message.reply_text(
             f"📥 Downloading file...\n"
             f"📁 Name: {document.file_name}\n"
             f"📊 Size: {size_mb:.2f} MB\n"
@@ -84,7 +88,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Check concurrent download limit
         if CONCURRENT_DOWNLOADS >= MAX_CONCURRENT_DOWNLOADS:
-            await update.message.reply_text(
+            await message.reply_text(
                 "⏳ Server busy! Too many downloads in progress.\n"
                 f"📊 Current limit: {MAX_CONCURRENT_DOWNLOADS} concurrent downloads\n"
                 "🔄 Please try again in a moment."
@@ -94,42 +98,20 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO add celery for downloads
         CONCURRENT_DOWNLOADS += 1
         try:
-            # Get file from Local Bot API Server
-            try:
-                file = await context.bot.get_file(document.file_id)
-                logger.info(
-                    f"File info received: path={file.file_path}, size={file.file_size}, file_id={document.file_id}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to get file info: {str(e)}")
-                await progress_msg.edit_text(
-                    f"❌ File access failed!\n"
-                    f"📁 Name: {document.file_name}\n"
-                    f"📊 Size: {size_mb:.2f} MB\n\n"
-                )
-                return
-
-            # Create temporary file for streaming download
+            # Create temporary file for downloading
             temp_dir = Path(BASE_DIR) / "data" / "temp"
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             with tempfile.NamedTemporaryFile(dir=temp_dir, delete=False) as temp_file:
                 temp_file_path = temp_file.name
 
-                # Download file directly to disk (streaming)
+                # Download file using Pyrogram (automatically uses Local Bot API Server)
                 try:
-                    # Use the telegram library's built-in download method
-                    # This handles Local Bot API Server automatically
-                    logger.info("Downloading file using telegram library method")
-                    logger.info(
-                        f"File path: {file.file_path}, File size: {file.file_size}"
-                    )
-                    await progress_msg.edit_text(
-                        "📥 Downloading file ...\n"
-                    )
+                    logger.info("Downloading file using Pyrogram")
+                    logger.info(f"File ID: {document.file_id}, File size: {file_size}")
 
                     # Download the file directly to the temp location
-                    await file.download_to_drive(temp_file_path)
+                    await client.download_media(message, file_name=temp_file_path)
 
                     logger.info(
                         f"File downloaded to temporary location: {temp_file_path}"
@@ -201,10 +183,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         except Exception as e:
             logger.error(
-                f"Error saving file for user {update.effective_user.id}: {str(e)}",
+                f"Error saving file for user {user_id}: {str(e)}",
                 exc_info=True,
             )
-            await update.message.reply_text(f"❌ Error saving file: {str(e)}")
+            await message.reply_text(f"❌ Error saving file: {str(e)}")
 
     finally:
         CONCURRENT_DOWNLOADS -= 1

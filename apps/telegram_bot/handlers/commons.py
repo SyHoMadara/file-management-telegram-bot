@@ -1,8 +1,8 @@
 import logging
 import os
 
-from telegram import Update
-from telegram.ext import ContextTypes
+from pyrogram import Client
+from pyrogram.types import Message
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +11,9 @@ MAX_REQUESTS_PER_MINUTE = int(os.environ.get("BOT_MAX_REQUESTS_PER_MINUTE", "5")
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("BOT_MAX_CONCURRENT_DOWNLOADS", "3"))
 
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(client: Client, message: Message):
     """Start command handler"""
-    await update.message.reply_text(
+    await message.reply_text(
         "🤖 Large File Storage Bot!\n\n"
         "📁 Send me any file up to 2GB and I'll store it.\n\n"
         "💡 Features:\n"
@@ -27,9 +27,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(client: Client, message: Message):
     """Help command handler"""
-    await update.message.reply_text(
+    await message.reply_text(
         "🆘 Help - Large File Storage Bot\n\n"
         "📋 Available Commands:\n"
         "• /start - Show welcome message\n"
