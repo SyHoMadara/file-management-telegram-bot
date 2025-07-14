@@ -7,6 +7,8 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from django.core.files.base import ContentFile
 from django.core.files import File
+from django.db import transaction
+from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 from urllib.parse import urlsplit
 from telegram import Update, Bot
@@ -47,9 +49,45 @@ def is_rate_limited(user_id):
     user_times.append(now)
     return False
 
+@sync_to_async
 def create_user_if_not_exists(user_id):
-    if not User.objects.filter(username=user_id).exists():
-        User.objects.create(username=user_id)
+    """Create user if not exists - async wrapper"""
+    try:
+        if not User.objects.filter(username=user_id).exists():
+            User.objects.create(username=user_id)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error creating user {user_id}: {e}")
+        raise
+
+@sync_to_async
+def get_user(user_id):
+    """Get user by ID - async wrapper"""
+    try:
+        return User.objects.get(username=user_id)
+    except User.DoesNotExist:
+        logger.error(f"User {user_id} not found")
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user {user_id}: {e}")
+        raise
+
+@sync_to_async
+def save_file_to_db(user, file_name, temp_file_path, file_size, mime_type):
+    """Save file to database using sync_to_async"""
+    try:
+        with open(temp_file_path, 'rb') as temp_file:
+            return FileManager.objects.create(
+                user=user,
+                name=file_name,
+                file=File(temp_file, name=file_name),
+                file_size=file_size,
+                file_mime_type=mime_type or 'application/octet-stream',
+            )
+    except Exception as e:
+        logger.error(f"Error saving file {file_name} to database: {e}")
+        raise
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle document uploads with Local Bot API Server (supports up to 2GB)"""
@@ -70,7 +108,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         document = update.message.document
         
         # Create user if not exists
-        create_user_if_not_exists(user_id)
+        user_created = await create_user_if_not_exists(user_id)
+        if user_created:
+            logger.info(f"Created new user: {user_id}")
         
         # Check file size
         file_size = document.file_size
@@ -126,17 +166,16 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             # Save to database using file path (no memory loading)
-            user = User.objects.get(username=user_id)
+            user = await get_user(user_id)
             
             try:
-                with open(temp_file_path, 'rb') as temp_file:
-                    saved_file = FileManager.objects.create(
-                        user=user,
-                        name=document.file_name,
-                        file=File(temp_file, name=document.file_name),
-                        file_size=file_size,
-                        file_mime_type=document.mime_type or 'application/octet-stream',
-                    )
+                saved_file = await save_file_to_db(
+                    user, 
+                    document.file_name, 
+                    temp_file_path, 
+                    file_size, 
+                    document.mime_type
+                )
             finally:
                 # Clean up temporary file
                 try:
@@ -171,8 +210,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
     await update.message.reply_text(
         "🤖 Large File Storage Bot!\n\n"
-        "📁 Send me any file up to 2GB and I'll store it.\n"
-        "⚡ Using Local Bot API Server for large files.\n\n"
+        "📁 Send me any file up to 2GB and I'll store it.\n\n"
         "💡 Features:\n"
         "• Files up to 2GB (2048MB)\n"
         "• Fast downloads via local server\n"
