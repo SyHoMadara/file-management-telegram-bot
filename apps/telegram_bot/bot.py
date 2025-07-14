@@ -178,6 +178,29 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"API Server: {API_SERVER}")
                     logger.error(f"File size: {file_size} bytes ({size_mb:.2f} MB)")
                     return
+                elif "Not Found" in str(e) or "InvalidToken" in str(e):
+                    await progress_msg.edit_text(
+                        f"❌ File access failed!\n"
+                        f"📁 Name: {document.file_name}\n"
+                        f"📊 Size: {size_mb:.2f} MB\n\n"
+                        f"🚨 Error: Local Bot API Server configuration issue\n\n"
+                        f"💡 Common causes:\n"
+                        f"1. Local Bot API Server not running properly\n"
+                        f"2. Invalid TELEGRAM_API_ID or TELEGRAM_API_HASH\n"
+                        f"3. Bot token not registered with Local API Server\n"
+                        f"4. Network connectivity issues\n\n"
+                        f"🔧 Quick fixes:\n"
+                        f"• Restart Local Bot API Server\n"
+                        f"• Verify .env credentials are correct\n"
+                        f"• Check docker-compose logs\n\n"
+                        f"📝 API Server: {API_SERVER}\n"
+                        f"📝 Error: {str(e)}"
+                    )
+                    logger.error(f"File access error for {document.file_name}: {str(e)}")
+                    logger.error(f"API Server: {API_SERVER}")
+                    logger.error(f"File ID: {document.file_id}")
+                    logger.error("Possible causes: Local Bot API Server not running or misconfigured")
+                    return
                 else:
                     raise e
             
@@ -189,9 +212,34 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 temp_file_path = temp_file.name
                 
                 # Download file directly to disk (streaming)
-                await file.download_to_drive(temp_file_path)
-                
-                logger.info(f"File downloaded to temporary location: {temp_file_path}")
+                try:
+                    await file.download_to_drive(temp_file_path)
+                    logger.info(f"File downloaded to temporary location: {temp_file_path}")
+                except Exception as download_error:
+                    if "Not Found" in str(download_error) or "InvalidToken" in str(download_error):
+                        await progress_msg.edit_text(
+                            f"❌ Download failed!\n"
+                            f"📁 Name: {document.file_name}\n"
+                            f"📊 Size: {size_mb:.2f} MB\n\n"
+                            f"🚨 Error: Cannot download file from Local Bot API Server\n\n"
+                            f"💡 This usually means:\n"
+                            f"• Local Bot API Server is not running\n"
+                            f"• API credentials are incorrect\n"
+                            f"• File expired or not accessible\n\n"
+                            f"🔧 Check docker logs:\n"
+                            f"`docker-compose -f docker-compose-bot.yml logs telegram-bot-api`\n\n"
+                            f"📝 Error: {str(download_error)}"
+                        )
+                        logger.error(f"Download failed for {document.file_name}: {str(download_error)}")
+                        logger.error("Local Bot API Server appears to be misconfigured or not running")
+                        # Clean up the temp file if it was created
+                        try:
+                            os.unlink(temp_file_path)
+                        except:
+                            pass
+                        return
+                    else:
+                        raise download_error
             
             # Update progress
             await progress_msg.edit_text(
