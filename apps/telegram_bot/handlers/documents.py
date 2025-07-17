@@ -1,8 +1,9 @@
 import logging
 import os
-import tempfile
 from collections import defaultdict, deque
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Optional
 from urllib.parse import urlsplit
 
 from asgiref.sync import sync_to_async
@@ -19,171 +20,239 @@ from config.settings import BASE_DIR
 
 logger = logging.getLogger(__name__)
 
-# Rate limiting setup - Adjust these for production
-user_request_times = defaultdict(deque)
+# Configuration constants
 MAX_REQUESTS_PER_MINUTE = int(os.environ.get("BOT_MAX_REQUESTS_PER_MINUTE", "5"))
-CONCURRENT_DOWNLOADS = 0
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("BOT_MAX_CONCURRENT_DOWNLOADS", "3"))
+MINIO_BASE_URL = f"http://{os.environ.get('MINIO_EXTERNAL_ENDPOINT', '')}"
 
-# Environment variables
-base_minio_url = "http://" + os.environ.get("MINIO_EXTERNAL_ENDPOINT", "")
+# Global state
+user_request_times = defaultdict(deque)
+concurrent_downloads = 0
 
 
-async def handle_document(client: Client, message: Message):
-    """Handle document uploads with Pyrogram and Local Bot API Server (supports up to 2GB)"""
-    global CONCURRENT_DOWNLOADS
+class FileProcessingError(Exception):
+    """Custom exception for file processing errors."""
 
-    user_id = message.from_user.id
+    pass
 
-    # Check rate limit
-    if is_rate_limited(user_id):
+
+async def handle_document(client: Client, message: Message) -> None:
+    """
+    Handle document uploads with Pyrogram and Local Bot API Server (supports up to 2GB).
+
+    Args:
+        client: Pyrogram Client instance
+        message: Pyrogram Message containing the document
+    """
+    global concurrent_downloads
+
+    if not message.document:
         await message.reply_text(
-            "⚠️ Rate limit exceeded!\n"
-            f"📊 You can upload max {MAX_REQUESTS_PER_MINUTE} files per minute.\n"
-            "⏳ Please wait before sending another file."
+            "🚫 **No Document Found**\nPlease send a valid file to upload."
         )
         return
 
+    user_id = message.from_user.id
+    document = message.document
+
     try:
-        document = message.document
-        if not document:
-            await message.reply_text("❌ No document found in the message.")
+        # Rate limiting check
+        if is_rate_limited(user_id):
+            await _send_rate_limit_message(message)
             return
 
-        # Create user if not exists
-        user_created = await create_user_if_not_exists(user_id)
-        if user_created:
-            logger.info(f"Created new user: {user_id}")
-        user = await get_user(user_id)
-        # Check file size
-        file_size = document.file_size
-        max_size = user.remaining_download_size * 1024 * 1024
+        # User validation and creation
+        user = await _validate_and_get_user(user_id)
+        if not user:
+            return
 
-        # Log file details for debugging
-        logger.info(
-            f"User: {user.username}, Processing file: {document.file_name}, Size: {file_size} bytes ({file_size / (1024 * 1024):.2f} MB)"
+        # File size validation
+        if not _is_file_size_valid(document.file_size, user):
+            await _send_file_size_error_message(message, document, user)
+            return
+
+        # Concurrent downloads check
+        if not _can_process_download():
+            await _send_concurrent_limit_message(message)
+            return
+
+        # Process file download and storage
+        await _process_file(client, message, document, user)
+
+    except FileProcessingError as e:
+        logger.error(f"File processing failed for user {user_id}: {str(e)}")
+        await message.reply_text(
+            "😔 **Error Processing File**\n"
+            "Something went wrong. Please try again later."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error for user {user_id}: {str(e)}", exc_info=True)
+        await message.reply_text(
+            "😔 **Unexpected Error**\n"
+            "An unexpected issue occurred. Please try again later."
         )
 
-        if file_size > max_size:
-            size_gb = file_size / (1024 * 1024 * 1024)
-            await message.reply_text(
-                f"❌ File too large ({size_gb:.1f}GB). Maximum download remaining is {user.remaining_download_size}MB.\n"
-                f"Buy a premium account to download more than 2GB :))\n"
-                f"You can use /premium command"
-            )
-            return
 
-        # Send progress message
-        size_mb = file_size / (1024 * 1024)
+async def _send_rate_limit_message(message: Message) -> None:
+    """Send rate limit exceeded message."""
+    await message.reply_text(
+        "⏱ **Rate Limit Reached**\n"
+        f"You've hit the limit of {MAX_REQUESTS_PER_MINUTE} uploads per minute.\n"
+        "Please wait a moment and try again! 🕒"
+    )
+
+
+async def _validate_and_get_user(user_id: int) -> Optional[object]:
+    """Validate and get or create user."""
+    user_created = await create_user_if_not_exists(user_id)
+    if user_created:
+        logger.info(f"Created new user: {user_id}")
+    return await get_user(user_id)
+
+
+def _is_file_size_valid(file_size: int, user: object) -> bool:
+    """Check if file size is within user's allowed limit."""
+    max_size = user.remaining_download_size * 1024 * 1024
+    return file_size <= max_size
+
+
+async def _send_file_size_error_message(
+    message: Message, document: object, user: object
+) -> None:
+    """Send file size limit exceeded message."""
+    size_gb = document.file_size / (1024 * 1024 * 1024)
+    await message.reply_text(
+        f"📏 **File Too Large**\n"
+        f"Your file ({size_gb:.1f}GB) exceeds the {user.remaining_download_size}MB limit.\n"
+        "💡 Upgrade to a premium account for larger uploads!\n"
+        "Use the **/premium** command for details."
+    )
+
+
+async def _send_concurrent_limit_message(message: Message) -> None:
+    """Send concurrent downloads limit message."""
+    await message.reply_text(
+        f"🚦 **Server Busy**\n"
+        f"Too many downloads are in progress (limit: {MAX_CONCURRENT_DOWNLOADS}).\n"
+        "Please try again in a moment! 🔄"
+    )
+
+
+def _can_process_download() -> bool:
+    """Check if new download can be processed."""
+    global concurrent_downloads
+    if concurrent_downloads >= MAX_CONCURRENT_DOWNLOADS:
+        return False
+    concurrent_downloads += 1
+    return True
+
+
+async def _process_file(
+    client: Client, message: Message, document: object, user: object
+) -> None:
+    """Process file download and storage."""
+    global concurrent_downloads
+    size_mb = document.file_size / (1024 * 1024)
+
+    try:
+        # Send initial progress message
         progress_msg = await message.reply_text(
-            f"📥 Downloading file...\n"
-            f"📁 Name: {document.file_name}\n"
-            f"📊 Size: {size_mb:.2f} MB\n"
-            f"⏳ Please wait..."
+            f"📥 **Downloading File**\n"
+            f"📄 **Name**: {document.file_name}\n"
+            f"📏 **Size**: {size_mb:.2f} MB\n"
+            "⏳ Please wait while we process your file..."
         )
 
-        # Check concurrent download limit
-        if CONCURRENT_DOWNLOADS >= MAX_CONCURRENT_DOWNLOADS:
-            await message.reply_text(
-                "⏳ Server busy! Too many downloads in progress.\n"
-                f"📊 Current limit: {MAX_CONCURRENT_DOWNLOADS} concurrent downloads\n"
-                "🔄 Please try again in a moment."
-            )
-            return
-
-        # TODO add celery for downloads and file type checking with magic
-        CONCURRENT_DOWNLOADS += 1
+        # Download and save file
+        temp_file_path = await _download_file(client, message, document)
         try:
-            # Create temporary file for downloading
-            temp_dir = Path(BASE_DIR) / "data" / "temp"
-            temp_dir.mkdir(parents=True, exist_ok=True)
-
-            with tempfile.NamedTemporaryFile(dir=temp_dir, delete=False) as temp_file:
-                temp_file_path = temp_file.name
-
-                # Download file using Pyrogram (automatically uses Local Bot API Server)
-                try:
-                    logger.info("Downloading file using Pyrogram")
-                    logger.info(f"File ID: {document.file_id}, File size: {file_size}")
-
-                    # Download the file directly to the temp location
-                    await client.download_media(message, file_name=temp_file_path)
-
-                    logger.info(
-                        f"File downloaded to temporary location: {temp_file_path}"
-                    )
-
-                except Exception as download_error:
-                    logger.error(
-                        f"Download failed for {document.file_name}: {str(download_error)}"
-                    )
-                    logger.error(
-                        "This might indicate Local Bot API Server issues or file access problems"
-                    )
-                    await progress_msg.edit_text(
-                        f"❌ File download failed!\n"
-                        f"📁 Name: {document.file_name}\n"
-                        f"📊 Size: {size_mb:.2f} MB\n\n"
-                    )
-                    # Clean up the temp file if it was created
-                    try:
-                        os.unlink(temp_file_path)
-                    except Exception:
-                        pass
-                    return
-
-            # Update progress
             await progress_msg.edit_text(
-                f"💾 Saving to storage...\n"
-                f"📁 Name: {document.file_name}\n"
-                f"📊 Size: {size_mb:.2f} MB"
+                f"💾 **Saving File**\n"
+                f"📄 **Name**: {document.file_name}\n"
+                f"📏 **Size**: {size_mb:.2f} MB\n"
+                "⏳ Saving to storage..."
             )
 
-            try:
-                saved_file = await save_file_to_db(
-                    user,
-                    document.file_name,
-                    temp_file_path,
-                    file_size,
-                    document.mime_type,
-                )
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_file_path)
-                    logger.info(f"Temporary file cleaned up: {temp_file_path}")
-                except OSError as e:
-                    logger.warning(
-                        f"Failed to clean up temporary file {temp_file_path}: {e}"
-                    )
-
-            # Generate URL
-            full_url = saved_file.file.url
-            parsed_url = urlsplit(full_url)
-            relative_path = parsed_url.path.lstrip("/") + "?" + parsed_url.query
-
-            user.remaining_download_size -= file_size / (1024 * 1024)
-            await sync_to_async(user.save)(update_fields=["remaining_download_size"])
-
-            # Update with success message
-            await progress_msg.edit_text(
-                f"✅ File saved successfully!\n"
-                f"📁 Name: {document.file_name}\n"
-                f"📊 Size: {size_mb:.2f} MB\n"
-                f"🔗 URL: {base_minio_url}/{relative_path}\n"
-                f"📉 Remaining download size: {user.remaining_download_size:.2f} MB"
+            saved_file = await save_file_to_db(
+                user,
+                document.file_name,
+                temp_file_path,
+                document.file_size,
+                document.mime_type,
             )
 
-            logger.info(
-                f"File {document.file_name} saved successfully for user {user_id}"
+            # Update user storage and send success message
+            await _finalize_upload(
+                message, progress_msg, saved_file, user, document, size_mb
             )
 
-        except Exception as e:
-            logger.error(
-                f"Error saving file for user {user_id}: {str(e)}",
-                exc_info=True,
-            )
-            await message.reply_text("❌ Error saving file")
+        finally:
+            _cleanup_temp_file(temp_file_path)
 
+    except Exception as e:
+        await progress_msg.edit_text(
+            f"❌ **Upload Failed**\n"
+            f"📄 **Name**: {document.file_name}\n"
+            f"📏 **Size**: {size_mb:.2f} MB\n"
+            "😔 Something went wrong during processing."
+        )
+        raise FileProcessingError(str(e))
     finally:
-        CONCURRENT_DOWNLOADS -= 1
+        concurrent_downloads -= 1
+
+
+async def _download_file(client: Client, message: Message, document: object) -> str:
+    """Download file to temporary location."""
+    temp_dir = Path(BASE_DIR) / "data" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    with NamedTemporaryFile(dir=temp_dir, delete=False) as temp_file:
+        temp_file_path = temp_file.name
+        try:
+            logger.info(
+                f"Downloading file: {document.file_name}, ID: {document.file_id}"
+            )
+            await client.download_media(message, file_name=temp_file_path)
+            logger.info(f"File downloaded to: {temp_file_path}")
+            return temp_file_path
+        except Exception as e:
+            logger.error(f"Download failed for {document.file_name}: {str(e)}")
+            _cleanup_temp_file(temp_file_path)
+            raise FileProcessingError(f"Download failed: {str(e)}")
+
+
+def _cleanup_temp_file(file_path: str) -> None:
+    """Clean up temporary file."""
+    try:
+        os.unlink(file_path)
+        logger.info(f"Temporary file cleaned up: {file_path}")
+    except OSError as e:
+        logger.warning(f"Failed to clean up temporary file {file_path}: {e}")
+
+
+async def _finalize_upload(
+    message: Message,
+    progress_msg: Message,
+    saved_file: object,
+    user: object,
+    document: object,
+    size_mb: float,
+) -> None:
+    """Finalize upload process and send success message."""
+    full_url = saved_file.file.url
+    parsed_url = urlsplit(full_url)
+    relative_path = parsed_url.path.lstrip("/") + "?" + parsed_url.query
+
+    user.remaining_download_size -= size_mb
+    await sync_to_async(user.save)(update_fields=["remaining_download_size"])
+
+    await progress_msg.edit_text(
+        f"🎉 **Upload Successful!**\n"
+        f"📄 **Name**: {document.file_name}\n"
+        f"📏 **Size**: {size_mb:.2f} MB\n"
+        f"🔗 **URL**: {MINIO_BASE_URL}/{relative_path}\n"
+        f"💾 **Remaining Storage**: {user.remaining_download_size:.2f} MB"
+    )
+    logger.info(
+        f"File {document.file_name} saved successfully for user {message.from_user.id}"
+    )
