@@ -4,7 +4,7 @@ import tempfile
 from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
-
+from asgiref.sync import sync_to_async
 from pyrogram import Client
 from pyrogram.types import Message
 
@@ -161,16 +161,17 @@ async def handle_document(client: Client, message: Message):
             parsed_url = urlsplit(full_url)
             relative_path = parsed_url.path.lstrip("/") + "?" + parsed_url.query
 
+            user.remaining_download_size -= file_size / (1024 * 1024)
+            await sync_to_async(user.save)(update_fields=["remaining_download_size"])
+
             # Update with success message
             await progress_msg.edit_text(
                 f"✅ File saved successfully!\n"
                 f"📁 Name: {document.file_name}\n"
                 f"📊 Size: {size_mb:.2f} MB\n"
                 f"🔗 URL: {base_minio_url}/{relative_path}"
+                f"Remaining download size is {user.remaining_download_size}"
             )
-
-            user.remaining_download_size -= file_size / (1024 * 1024)
-            await user.save(update_fields=["remaining_download_size"])
 
             logger.info(
                 f"File {document.file_name} saved successfully for user {user_id}"
