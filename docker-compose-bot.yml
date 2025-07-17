@@ -15,7 +15,7 @@ services:
       - ./apps/config:/app/apps/config/:ro
       - django-data:/app/data/
     restart: unless-stopped
-    port:
+    ports:
       - "8383:8000"
 
 
