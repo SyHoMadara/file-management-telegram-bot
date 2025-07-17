@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 from typing import Optional, Dict
 from urllib.parse import urlsplit
 import uuid
+import asyncio
 
 from asgiref.sync import sync_to_async
 from pyrogram import Client
@@ -81,6 +82,48 @@ async def handle_document(client: Client, message: Message) -> None:
             message, "Unexpected Error", "An unexpected issue occurred. Please try again later."
         )
 
+async def _show_download_confirmation(
+    message: Message, document: object, download_id: str
+) -> None:
+    """Show download confirmation with glass-style buttons and file properties."""
+    size_mb = document.file_size / (1024 * 1024)
+    file_properties = (
+        f"📄 **Name**: {document.file_name}\n"
+        f"📏 **Size**: {size_mb:.2f} MB\n"
+        f"📋 **Type**: {document.mime_type or 'Unknown'}\n"
+        f"📅 **Date**: {document.date.strftime('%Y-%m-%d %H:%M:%S') if document.date else 'N/A'}\n"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Start Download 🚀",
+                    callback_data=f"start_download:{download_id}:{message.chat.id}:{message.id}",
+                ),
+                InlineKeyboardButton(
+                    "Cancel ❌", callback_data=f"cancel_download:{download_id}"
+                ),
+            ]
+        ]
+    )
+
+    confirmation_msg = await message.reply_text(
+        f"📥 **Download Confirmation**\n\n{file_properties}\n"
+        "Would you like to start downloading this file?",
+        reply_markup=keyboard,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    download_tasks[download_id] = True
+
+    # Schedule cleanup for download task
+    async def cleanup_download_task():
+        await asyncio.sleep(150)  # 2.5 minutes
+        download_tasks.pop(download_id, None)
+        logger.info(f"Cleaned up download_id: {download_id}")
+
+    asyncio.create_task(cleanup_download_task())
+
 
 async def handle_download_callback(client: Client, callback_query: object) -> None:
     """
@@ -93,8 +136,58 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
     data = callback_query.data
     message = callback_query.message
     user_id = callback_query.from_user.id
-    document = message.reply_to_message.document
-    download_id = data.split(":")[1] if ":" in data else ""
+    parts = data.split(":")
+    download_id = parts[1] if len(parts) > 1 else ""
+
+    # Check if download_id exists in download_tasks
+    if download_id not in download_tasks:
+        await message.edit_text(
+            "❌ **Request Expired or Invalid**\nThis download request is no longer valid.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        logger.error(
+            f"Invalid callback: Download ID {download_id} not found in download_tasks for user {user_id}"
+        )
+        return
+
+    # Retrieve original document message
+    if len(parts) < 4:
+        await message.edit_text(
+            "❌ **Invalid Request**\nInvalid callback data.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        logger.error(
+            f"Invalid callback: Malformed callback data {data} for user {user_id}"
+        )
+        return
+
+    try:
+        chat_id, msg_id = int(parts[2]), int(parts[3])
+        document_message = await client.get_messages(chat_id, msg_id)
+    except Exception as e:
+        await message.edit_text(
+            "❌ **Invalid Request**\nUnable to retrieve document message.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        logger.error(
+            f"Invalid callback: Failed to retrieve document message for user {user_id}, "
+            f"download_id: {download_id}, error: {str(e)}"
+        )
+        return
+
+    # Check if message has a document
+    if not document_message.document:
+        await message.edit_text(
+            "❌ **Invalid Request**\nNo document found for this action.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        logger.error(
+            f"Invalid callback: No document found for user {user_id}, download_id: {download_id}, "
+            f"chat_id: {chat_id}, msg_id: {msg_id}"
+        )
+        return
+
+    document = document_message.document
 
     if data.startswith("start_download"):
         try:
@@ -103,17 +196,27 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
         except FileProcessingError as e:
             logger.error(f"File processing failed for user {user_id}: {str(e)}")
             await _send_error_message(
-                message, "Error Processing File", "Something went wrong. Please try again later."
+                message,
+                "Error Processing File",
+                "Something went wrong. Please try again later.",
             )
         except Exception as e:
-            logger.error(f"Unexpected error for user {user_id}: {str(e)}", exc_info=True)
+            logger.error(
+                f"Unexpected error for user {user_id}: {str(e)}", exc_info=True
+            )
             await _send_error_message(
-                message, "Unexpected Error", "An unexpected issue occurred. Please try again later."
+                message,
+                "Unexpected Error",
+                "An unexpected issue occurred. Please try again later.",
             )
     elif data.startswith("cancel_download"):
         download_tasks.pop(download_id, None)
-        await message.edit_text("❌ **Download Cancelled**", parse_mode=ParseMode.MARKDOWN)
-        logger.info(f"Download cancelled for user {user_id}, download_id: {download_id}")
+        await message.edit_text(
+            "❌ **Download Cancelled**", parse_mode=ParseMode.MARKDOWN
+        )
+        logger.info(
+            f"Download cancelled for user {user_id}, download_id: {download_id}"
+        )
 
 
 async def _validate_user(user_id: int) -> Optional[object]:
@@ -174,40 +277,6 @@ async def _send_error_message(message: Message, title: str, description: str) ->
         f"🚫 **{title}**\n{description}",
         parse_mode=ParseMode.MARKDOWN
     )
-
-
-async def _show_download_confirmation(message: Message, document: object, download_id: str) -> None:
-    """Show download confirmation with glass-style buttons and file properties."""
-    size_mb = document.file_size / (1024 * 1024)
-    file_properties = (
-        f"📄 **Name**: {document.file_name}\n"
-        f"📏 **Size**: {size_mb:.2f} MB\n"
-        f"📋 **Type**: {document.mime_type or 'Unknown'}\n"
-        f"📅 **Date**: {document.date.strftime('%Y-%m-%d %H:%M:%S') if document.date else 'N/A'}\n"
-    )
-
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Start Download 🚀",
-                    callback_data=f"start_download:{download_id}"
-                ),
-                InlineKeyboardButton(
-                    "Cancel ❌",
-                    callback_data=f"cancel_download:{download_id}"
-                ),
-            ]
-        ]
-    )
-
-    await message.reply_text(
-        f"📥 **Download Confirmation**\n\n{file_properties}\n"
-        "Would you like to start downloading this file?",
-        reply_markup=keyboard,
-        parse_mode=ParseMode.MARKDOWN
-    )
-    download_tasks[download_id] = True
 
 
 async def _process_file_download(
