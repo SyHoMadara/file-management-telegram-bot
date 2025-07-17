@@ -3,12 +3,13 @@ import os
 from collections import defaultdict, deque
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional
+from typing import Optional, Dict
 from urllib.parse import urlsplit
+import uuid
 
 from asgiref.sync import sync_to_async
 from pyrogram import Client
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from apps.telegram_bot.utils.utils import (
     create_user_if_not_exists,
@@ -16,7 +17,7 @@ from apps.telegram_bot.utils.utils import (
     is_rate_limited,
     save_file_to_db,
 )
-from config.settings import BASE_DIR
+from config.settings import BASE_DIR, MINIO_URL_EXPIRY_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ MINIO_BASE_URL = f"http://{os.environ.get('MINIO_EXTERNAL_ENDPOINT', '')}"
 # Global state
 user_request_times = defaultdict(deque)
 concurrent_downloads = 0
+download_tasks: Dict[str, bool] = {}
 
 
 class FileProcessingError(Exception):
@@ -38,71 +40,95 @@ class FileProcessingError(Exception):
 
 async def handle_document(client: Client, message: Message) -> None:
     """
-    Handle document uploads with Pyrogram and Local Bot API Server (supports up to 2GB).
+    Handle document uploads with Pyrogram and MinIO storage.
 
     Args:
         client: Pyrogram Client instance
         message: Pyrogram Message containing the document
     """
-    global concurrent_downloads
-
     if not message.document:
-        await message.reply_text(
-            "🚫 **No Document Found**\nPlease send a valid file to upload."
+        await _send_error_message(
+            message, "No Document Found", "Please send a valid file to upload."
         )
         return
 
     user_id = message.from_user.id
     document = message.document
+    download_id = str(uuid.uuid4())
 
     try:
-        # Rate limiting check
+        # Validate user and rate limits
+        user = await _validate_user(user_id)
+        if not user:
+            return
+
         if is_rate_limited(user_id):
             await _send_rate_limit_message(message)
             return
 
-        # User validation and creation
-        user = await _validate_and_get_user(user_id)
-        if not user:
-            return
-
-        # File size validation
         if not _is_file_size_valid(document.file_size, user):
             await _send_file_size_error_message(message, document, user)
             return
 
-        # Concurrent downloads check
         if not _can_process_download():
             await _send_concurrent_limit_message(message)
             return
 
-        # Process file download and storage
-        await _process_file(client, message, document, user)
+        # Show download confirmation with glass buttons
+        await _show_download_confirmation(message, document, download_id)
 
-    except FileProcessingError as e:
-        logger.error(f"File processing failed for user {user_id}: {str(e)}")
-        await message.reply_text(
-            "😔 **Error Processing File**\n"
-            "Something went wrong. Please try again later."
-        )
     except Exception as e:
         logger.error(f"Unexpected error for user {user_id}: {str(e)}", exc_info=True)
-        await message.reply_text(
-            "😔 **Unexpected Error**\n"
-            "An unexpected issue occurred. Please try again later."
+        await _send_error_message(
+            message,
+            "Unexpected Error",
+            "An unexpected issue occurred. Please try again later.",
         )
 
 
-async def _send_rate_limit_message(message: Message) -> None:
-    """Send rate limit exceeded message."""
-    await message.reply_text(
-        "⏱ **Rate Limit Reached**\n"
-        f"You've hit the limit of {MAX_REQUESTS_PER_MINUTE} uploads per minute.\n"
-        "Please wait a moment and try again! 🕒"
-    )
+async def handle_download_callback(client: Client, callback_query: object) -> None:
+    """
+    Handle callback queries for download start/cancel.
+
+    Args:
+        client: Pyrogram Client instance
+        callback_query: Callback query from button interaction
+    """
+    data = callback_query.data
+    message = callback_query.message
+    user_id = callback_query.from_user.id
+    document = message.reply_to_message.document
+    download_id = data.split(":")[1] if ":" in data else ""
+
+    if data.startswith("start_download"):
+        try:
+            user = await get_user(user_id)
+            await _process_file_download(client, message, document, user, download_id)
+        except FileProcessingError as e:
+            logger.error(f"File processing failed for user {user_id}: {str(e)}")
+            await _send_error_message(
+                message,
+                "Error Processing File",
+                "Something went wrong. Please try again later.",
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error for user {user_id}: {str(e)}", exc_info=True
+            )
+            await _send_error_message(
+                message,
+                "Unexpected Error",
+                "An unexpected issue occurred. Please try again later.",
+            )
+    elif data.startswith("cancel_download"):
+        download_tasks.pop(download_id, None)
+        await message.edit_text("❌ **Download Cancelled**")
+        logger.info(
+            f"Download cancelled for user {user_id}, download_id: {download_id}"
+        )
 
 
-async def _validate_and_get_user(user_id: int) -> Optional[object]:
+async def _validate_user(user_id: int) -> Optional[object]:
     """Validate and get or create user."""
     user_created = await create_user_if_not_exists(user_id)
     if user_created:
@@ -116,28 +142,6 @@ def _is_file_size_valid(file_size: int, user: object) -> bool:
     return file_size <= max_size
 
 
-async def _send_file_size_error_message(
-    message: Message, document: object, user: object
-) -> None:
-    """Send file size limit exceeded message."""
-    size_gb = document.file_size / (1024 * 1024 * 1024)
-    await message.reply_text(
-        f"📏 **File Too Large**\n"
-        f"Your file ({size_gb:.1f}GB) exceeds the {user.remaining_download_size}MB limit.\n"
-        "💡 Upgrade to a premium account for larger uploads!\n"
-        "Use the **/premium** command for details."
-    )
-
-
-async def _send_concurrent_limit_message(message: Message) -> None:
-    """Send concurrent downloads limit message."""
-    await message.reply_text(
-        f"🚦 **Server Busy**\n"
-        f"Too many downloads are in progress (limit: {MAX_CONCURRENT_DOWNLOADS}).\n"
-        "Please try again in a moment! 🔄"
-    )
-
-
 def _can_process_download() -> bool:
     """Check if new download can be processed."""
     global concurrent_downloads
@@ -147,20 +151,95 @@ def _can_process_download() -> bool:
     return True
 
 
-async def _process_file(
-    client: Client, message: Message, document: object, user: object
+async def _send_rate_limit_message(message: Message) -> None:
+    """Send rate limit exceeded message."""
+    await _send_error_message(
+        message,
+        "Rate Limit Reached",
+        f"You've hit the limit of {MAX_REQUESTS_PER_MINUTE} uploads per minute.\nPlease wait a moment and try again! 🕒",
+    )
+
+
+async def _send_file_size_error_message(
+    message: Message, document: object, user: object
+) -> None:
+    """Send file size limit exceeded message."""
+    size_gb = document.file_size / (1024 * 1024 * 1024)
+    await _send_error_message(
+        message,
+        "File Too Large",
+        f"Your file ({size_gb:.1f}GB) exceeds the {user.remaining_download_size}MB limit.\n"
+        "💡 Upgrade to a premium account for larger uploads!\nUse the **/premium** command for details.",
+    )
+
+
+async def _send_concurrent_limit_message(message: Message) -> None:
+    """Send concurrent downloads limit message."""
+    await _send_error_message(
+        message,
+        "Server Busy",
+        f"Too many downloads are in progress (limit: {MAX_CONCURRENT_DOWNLOADS}).\nPlease try again in a moment! 🔄",
+    )
+
+
+async def _send_error_message(message: Message, title: str, description: str) -> None:
+    """Send formatted error message."""
+    await message.reply_text(f"🚫 **{title}**\n{description}", parse_mode="Markdown")
+
+
+async def _show_download_confirmation(
+    message: Message, document: object, download_id: str
+) -> None:
+    """Show download confirmation with glass-style buttons and file properties."""
+    size_mb = document.file_size / (1024 * 1024)
+    file_properties = (
+        f"📄 **Name**: {document.file_name}\n"
+        f"📏 **Size**: {size_mb:.2f} MB\n"
+        f"📋 **Type**: {document.mime_type or 'Unknown'}\n"
+        f"📅 **Date**: {document.date.strftime('%Y-%m-%d %H:%M:%S') if document.date else 'N/A'}\n"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Start Download 🚀", callback_data=f"start_download:{download_id}"
+                ),
+                InlineKeyboardButton(
+                    "Cancel ❌", callback_data=f"cancel_download:{download_id}"
+                ),
+            ]
+        ]
+    )
+
+    await message.reply_text(
+        f"📥 **Download Confirmation**\n\n{file_properties}\n"
+        "Would you like to start downloading this file?",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    download_tasks[download_id] = True
+
+
+async def _process_file_download(
+    client: Client, message: Message, document: object, user: object, download_id: str
 ) -> None:
     """Process file download and storage."""
     global concurrent_downloads
     size_mb = document.file_size / (1024 * 1024)
 
+    if download_id not in download_tasks:
+        await message.edit_text("❌ **Download Cancelled or Expired**")
+        return
+
     try:
-        # Send initial progress message
-        progress_msg = await message.reply_text(
+        # Update progress message
+        progress_msg = await message.edit_text(
             f"📥 **Downloading File**\n"
             f"📄 **Name**: {document.file_name}\n"
             f"📏 **Size**: {size_mb:.2f} MB\n"
-            "⏳ Please wait while we process your file..."
+            "⏳ Please wait while we process your file...",
+            parse_mode="Markdown",
         )
 
         # Download and save file
@@ -170,7 +249,8 @@ async def _process_file(
                 f"💾 **Saving File**\n"
                 f"📄 **Name**: {document.file_name}\n"
                 f"📏 **Size**: {size_mb:.2f} MB\n"
-                "⏳ Saving to storage..."
+                "⏳ Saving to storage...",
+                parse_mode="Markdown",
             )
 
             saved_file = await save_file_to_db(
@@ -181,7 +261,7 @@ async def _process_file(
                 document.mime_type,
             )
 
-            # Update user storage and send success message
+            # Finalize upload
             await _finalize_upload(
                 message, progress_msg, saved_file, user, document, size_mb
             )
@@ -190,15 +270,17 @@ async def _process_file(
             _cleanup_temp_file(temp_file_path)
 
     except Exception as e:
-        await progress_msg.edit_text(
+        await message.edit_text(
             f"❌ **Upload Failed**\n"
             f"📄 **Name**: {document.file_name}\n"
             f"📏 **Size**: {size_mb:.2f} MB\n"
-            "😔 Something went wrong during processing."
+            "😔 Something went wrong during processing.",
+            parse_mode="Markdown",
         )
         raise FileProcessingError(str(e))
     finally:
         concurrent_downloads -= 1
+        download_tasks.pop(download_id, None)
 
 
 async def _download_file(client: Client, message: Message, document: object) -> str:
@@ -250,8 +332,11 @@ async def _finalize_upload(
         f"🎉 **Upload Successful!**\n"
         f"📄 **Name**: {document.file_name}\n"
         f"📏 **Size**: {size_mb:.2f} MB\n"
+        f"📋 **Type**: {document.mime_type or 'Unknown'}\n"
+        f"📅 **Expire Time**: {str(MINIO_URL_EXPIRY_HOURS)}\n"
         f"🔗 **URL**: {MINIO_BASE_URL}/{relative_path}\n"
-        f"💾 **Remaining Storage**: {user.remaining_download_size:.2f} MB"
+        f"💾 **Remaining Storage**: {user.remaining_download_size:.2f} MB",
+        parse_mode="Markdown",
     )
     logger.info(
         f"File {document.file_name} saved successfully for user {message.from_user.id}"
