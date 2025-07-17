@@ -27,4 +27,4 @@ RUN mkdir -p /app/data/telegram-bot-api-sessions/
 EXPOSE 8000
 
 # RUN 
-CMD uv run manage.py migrate && uv run manage.py runbot 0.0.0.0:8000 --reload
+CMD uv run manage.py migrate && nohup uv run manage.py runserver & && uv run manage.py runbot --reload
