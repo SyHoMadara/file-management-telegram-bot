@@ -4,6 +4,7 @@ import tempfile
 from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
+
 from asgiref.sync import sync_to_async
 from pyrogram import Client
 from pyrogram.types import Message
@@ -56,9 +57,7 @@ async def handle_document(client: Client, message: Message):
         user = await get_user(user_id)
         # Check file size
         file_size = document.file_size
-        max_size = (
-            user.remaining_download_size * 1024 * 1024
-        )
+        max_size = user.remaining_download_size * 1024 * 1024
 
         # Log file details for debugging
         logger.info(

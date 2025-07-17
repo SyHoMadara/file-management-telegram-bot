@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('account', '0003_user_maximum_download_size_per_day'),
+        ("account", "0003_user_maximum_download_size_per_day"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='user',
-            old_name='is_permiume',
-            new_name='is_premium',
+            model_name="user",
+            old_name="is_permiume",
+            new_name="is_premium",
         ),
     ]

@@ -1,6 +1,7 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db import models
-import logging
 
 logger = logging.getLogger(__name__)
 User = get_user_model()

@@ -4,20 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('account', '0001_initial'),
+        ("account", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='is_permiume',
-            field=models.BooleanField(default=False, help_text='Designates whether this user has a premium account.', verbose_name='is premium'),
+            model_name="user",
+            name="is_permiume",
+            field=models.BooleanField(
+                default=False,
+                help_text="Designates whether this user has a premium account.",
+                verbose_name="is premium",
+            ),
         ),
         migrations.AddField(
-            model_name='user',
-            name='remaining_download_size',
-            field=models.IntegerField(default=20, help_text='Remaining download size in bytes for the user.', verbose_name='remaining download size'),
+            model_name="user",
+            name="remaining_download_size",
+            field=models.IntegerField(
+                default=20,
+                help_text="Remaining download size in bytes for the user.",
+                verbose_name="remaining download size",
+            ),
         ),
     ]

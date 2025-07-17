@@ -1,14 +1,14 @@
 import logging
 import os
 
-from django.utils.translation import gettext_lazy as _, activate, get_language
-from django.utils import translation
+from django.utils.translation import activate, get_language
+from django.utils.translation import gettext_lazy as _
 from pyrogram import Client
 from pyrogram.types import (
-    Message,
     CallbackQuery,
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ async def help_command(client: Client, message: Message):
         "• Make sure your file is under 2GB\n"
         "• Wait between uploads if rate limited\n"
         "• Try again if upload fails"
-    ) 
+    )
 
     current_lang = get_language()
     logger.info(f"Sending help message in language: {current_lang}")

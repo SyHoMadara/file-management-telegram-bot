@@ -1,9 +1,12 @@
-from django.db.models.signals import post_delete
-from django.dispatch import receiver
-from .models import FileManager
 import logging
 
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+from .models import FileManager
+
 logger = logging.getLogger(__name__)
+
 
 @receiver(post_delete, sender=FileManager)
 def delete_file_from_minio(sender, instance, **kwargs):

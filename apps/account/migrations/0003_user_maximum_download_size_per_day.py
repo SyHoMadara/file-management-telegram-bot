@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('account', '0002_user_is_permiume_user_remaining_download_size'),
+        ("account", "0002_user_is_permiume_user_remaining_download_size"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='maximum_download_size_per_day',
-            field=models.IntegerField(default=20, help_text='Maximum download size per day in bytes for the user.', verbose_name='maximum download size per day'),
+            model_name="user",
+            name="maximum_download_size_per_day",
+            field=models.IntegerField(
+                default=20,
+                help_text="Maximum download size per day in bytes for the user.",
+                verbose_name="maximum download size per day",
+            ),
         ),
     ]

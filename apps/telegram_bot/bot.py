@@ -3,13 +3,13 @@ import logging
 import os
 
 from pyrogram import Client, filters
-from pyrogram.handlers import MessageHandler, CallbackQueryHandler
+from pyrogram.handlers import CallbackQueryHandler, MessageHandler
 
 from apps.telegram_bot.handlers.commons import (
     help_command,
-    start_command,
-    language_command,
     language_callback,
+    language_command,
+    start_command,
 )
 from apps.telegram_bot.handlers.documents import handle_document
 from config.settings import BASE_DIR
@@ -19,6 +19,7 @@ API_ID = int(os.environ.get("TELEGRAM_API_ID", "0"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
 
 logger = logging.getLogger(__name__)
+
 
 async def send_startup_notification(app):
     """Send notification to specific user when bot starts"""
