@@ -38,6 +38,21 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Required. 150 characters or fewer. Letters, digits and @/._/+/- characters"
         ),
     )
+    remaining_download_size = models.IntegerField(
+        default=20,
+        verbose_name=_("remaining download size"),
+        help_text=_("Remaining download size in bytes for the user."),
+    )
+    maximum_download_size_per_day = models.IntegerField(
+        default=20,
+        verbose_name=_("maximum download size per day"),
+        help_text=_("Maximum download size per day in bytes for the user."),
+    )
+    is_premium = models.BooleanField(
+        default=False,
+        verbose_name=_("is premium"),
+        help_text=_("Designates whether this user has a premium account."),
+    )
     is_verified = models.BooleanField(
         default=True,
         verbose_name=_("is verified"),
