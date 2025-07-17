@@ -69,6 +69,7 @@ async def handle_document(client: Client, message: Message):
             size_gb = file_size / (1024 * 1024 * 1024)
             await message.reply_text(
                 f"❌ File too large ({size_gb:.1f}GB). Maximum download remaining is {user.remaining_download_size}MB."
+                f" Buy a premium account to download more than 2GB :))"
             )
             return
 
