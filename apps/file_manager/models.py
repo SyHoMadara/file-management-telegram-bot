@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+import logging
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -21,6 +23,19 @@ class FileManager(models.Model):
 
     def __str__(self):
         return self.name
+
+    def delete(self, *args, **kwargs):
+        # Store file path before deletion
+        file_path = self.file.name if self.file else None
+        # Call parent delete to remove the model instance
+        super().delete(*args, **kwargs)
+        # Delete file from MinIO if it exists
+        if file_path:
+            try:
+                self.file.storage.delete(file_path)
+                logger.info(f"Deleted file {file_path} from MinIO bucket 'media'")
+            except Exception as e:
+                logger.error(f"Error deleting file {file_path} from MinIO: {e}")
 
     class Meta:
         verbose_name = "File Manager"
