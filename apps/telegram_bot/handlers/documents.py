@@ -53,29 +53,24 @@ async def handle_document(client: Client, message: Message):
         user_created = await create_user_if_not_exists(user_id)
         if user_created:
             logger.info(f"Created new user: {user_id}")
-
+        user = await get_user(user_id)
         # Check file size
         file_size = document.file_size
-        max_size = 2 * 1024 * 1024 * 1024  # 2GB limit for Local Bot API
+        max_size = (
+            user.remaining_download_size * 1024 * 1024
+        )
 
         # Log file details for debugging
         logger.info(
-            f"Processing file: {document.file_name}, Size: {file_size} bytes ({file_size / (1024 * 1024):.2f} MB)"
+            f"User: {user.username}, Processing file: {document.file_name}, Size: {file_size} bytes ({file_size / (1024 * 1024):.2f} MB)"
         )
 
         if file_size > max_size:
             size_gb = file_size / (1024 * 1024 * 1024)
             await message.reply_text(
-                f"❌ File too large ({size_gb:.1f}GB). Maximum file size is 2GB."
+                f"❌ File too large ({size_gb:.1f}GB). Maximum file size is {user.remaining_download_size}MB."
             )
             return
-
-        # Check if file might be too big for standard Bot API (20MB)
-        standard_limit = 20 * 1024 * 1024  # 20MB
-        if file_size > standard_limit:
-            logger.warning(
-                f"File {document.file_name} ({file_size / (1024 * 1024):.2f}MB) exceeds standard Bot API limit (20MB). Using Local Bot API Server."
-            )
 
         # Send progress message
         size_mb = file_size / (1024 * 1024)
@@ -143,9 +138,6 @@ async def handle_document(client: Client, message: Message):
                 f"📊 Size: {size_mb:.2f} MB"
             )
 
-            # Save to database using file path (no memory loading)
-            user = await get_user(user_id)
-
             try:
                 saved_file = await save_file_to_db(
                     user,
@@ -176,6 +168,9 @@ async def handle_document(client: Client, message: Message):
                 f"📊 Size: {size_mb:.2f} MB\n"
                 f"🔗 URL: {base_minio_url}/{relative_path}"
             )
+
+            user.remaining_download_size -= file_size / (1024 * 1024)
+            user.save(update_fields=["remaining_download_size"])
 
             logger.info(
                 f"File {document.file_name} saved successfully for user {user_id}"
