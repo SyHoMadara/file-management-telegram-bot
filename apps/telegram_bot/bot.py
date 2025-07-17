@@ -11,7 +11,7 @@ from apps.telegram_bot.handlers.commons import (
     language_command,
     start_command,
 )
-from apps.telegram_bot.handlers.documents import handle_document
+from apps.telegram_bot.handlers.documents import handle_document, handle_download_callback
 from config.settings import BASE_DIR
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
@@ -94,6 +94,7 @@ async def start_local_bot_async():
         )
     )
     app.add_handler(MessageHandler(handle_document, filters.document))
+    app.add_handler(CallbackQueryHandler(handle_download_callback))
     app.add_handler(CallbackQueryHandler(language_callback, filters.regex("^lang_")))
 
     logger.info("✅ Bot handlers registered successfully")
