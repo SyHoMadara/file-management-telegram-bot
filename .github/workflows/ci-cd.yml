@@ -34,8 +34,7 @@ jobs:
           # Navigate to the project directory on the server
           cd /home/hosein/file-management-telegram-bot
           # Pull the latest code
-          docker compose -f docker-compose-bot.yml down
+          # docker compose -f docker-compose-bot.yml down
           git pull origin master
           # Run docker-compose up --build -d
-          docker compose -f docker-compose-bot.yml up --build -d
-# starttttt
+          # docker compose -f docker-compose-bot.yml up --build -d
