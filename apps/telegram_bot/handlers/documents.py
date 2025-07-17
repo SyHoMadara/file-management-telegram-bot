@@ -32,10 +32,12 @@ MINIO_BASE_URL = f"http://{os.environ.get('MINIO_EXTERNAL_ENDPOINT', '')}"
 user_request_times = defaultdict(deque)
 concurrent_downloads = 0
 download_tasks: Dict[str, bool] = {}
+download_mapping: Dict[str, str] = {}  # Maps short_id to full download_id
 
 
 class FileProcessingError(Exception):
     """Custom exception for file processing errors."""
+
     pass
 
 
@@ -48,7 +50,9 @@ async def handle_document(client: Client, message: Message) -> None:
         message: Pyrogram Message containing the document
     """
     if not message.document:
-        await _send_error_message(message, "No Document Found", "Please send a valid file to upload.")
+        await _send_error_message(
+            message, "No Document Found", "Please send a valid file to upload."
+        )
         return
 
     user_id = message.from_user.id
@@ -79,8 +83,11 @@ async def handle_document(client: Client, message: Message) -> None:
     except Exception as e:
         logger.error(f"Unexpected error for user {user_id}: {str(e)}", exc_info=True)
         await _send_error_message(
-            message, "Unexpected Error", "An unexpected issue occurred. Please try again later."
+            message,
+            "Unexpected Error",
+            "An unexpected issue occurred. Please try again later.",
         )
+
 
 async def _show_download_confirmation(
     message: Message, document: object, download_id: str
@@ -94,33 +101,37 @@ async def _show_download_confirmation(
         f"📅 **Date**: {document.date.strftime('%Y-%m-%d %H:%M:%S') if document.date else 'N/A'}\n"
     )
 
+    # Use shorter callback data to avoid 64-byte limit
+    short_id = download_id[:8]  # Use first 8 characters of UUID
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
                     "Start Download 🚀",
-                    callback_data=f"start_download:{download_id}:{message.chat.id}:{message.id}",
+                    callback_data=f"start:{short_id}:{message.chat.id}:{message.id}",
                 ),
-                InlineKeyboardButton(
-                    "Cancel ❌", callback_data=f"cancel_download:{download_id}"
-                ),
+                InlineKeyboardButton("Cancel ❌", callback_data=f"cancel:{short_id}"),
             ]
         ]
     )
 
-    confirmation_msg = await message.reply_text(
+    await message.reply_text(
         f"📥 **Download Confirmation**\n\n{file_properties}\n"
         "Would you like to start downloading this file?",
         reply_markup=keyboard,
         parse_mode=ParseMode.MARKDOWN,
     )
+
+    # Store mappings
     download_tasks[download_id] = True
+    download_mapping[short_id] = download_id
 
     # Schedule cleanup for download task
     async def cleanup_download_task():
         await asyncio.sleep(150)  # 2.5 minutes
         download_tasks.pop(download_id, None)
-        logger.info(f"Cleaned up download_id: {download_id}")
+        download_mapping.pop(short_id, None)
+        logger.info(f"Cleaned up download_id: {download_id} and short_id: {short_id}")
 
     asyncio.create_task(cleanup_download_task())
 
@@ -137,7 +148,19 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
     message = callback_query.message
     user_id = callback_query.from_user.id
     parts = data.split(":")
-    download_id = parts[1] if len(parts) > 1 else ""
+    short_id = parts[1] if len(parts) > 1 else ""
+
+    # Get the full download_id from the mapping
+    download_id = download_mapping.get(short_id)
+    if not download_id:
+        await message.edit_text(
+            "❌ **Request Expired or Invalid**\nThis download request is no longer valid.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        logger.error(
+            f"Invalid callback: Short ID {short_id} not found in download_mapping for user {user_id}"
+        )
+        return
 
     # Check if download_id exists in download_tasks
     if download_id not in download_tasks:
@@ -171,7 +194,7 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
         )
         logger.error(
             f"Invalid callback: Failed to retrieve document message for user {user_id}, "
-            f"download_id: {download_id}, error: {str(e)}"
+            f"short_id: {short_id}, download_id: {download_id}, error: {str(e)}"
         )
         return
 
@@ -182,14 +205,14 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
             parse_mode=ParseMode.MARKDOWN,
         )
         logger.error(
-            f"Invalid callback: No document found for user {user_id}, download_id: {download_id}, "
-            f"chat_id: {chat_id}, msg_id: {msg_id}"
+            f"Invalid callback: No document found for user {user_id}, short_id: {short_id}, "
+            f"download_id: {download_id}, chat_id: {chat_id}, msg_id: {msg_id}"
         )
         return
 
     document = document_message.document
 
-    if data.startswith("start_download"):
+    if data.startswith("start"):
         try:
             user = await get_user(user_id)
             await _process_file_download(client, message, document, user, download_id)
@@ -209,13 +232,14 @@ async def handle_download_callback(client: Client, callback_query: object) -> No
                 "Unexpected Error",
                 "An unexpected issue occurred. Please try again later.",
             )
-    elif data.startswith("cancel_download"):
+    elif data.startswith("cancel"):
         download_tasks.pop(download_id, None)
+        download_mapping.pop(short_id, None)
         await message.edit_text(
             "❌ **Download Cancelled**", parse_mode=ParseMode.MARKDOWN
         )
         logger.info(
-            f"Download cancelled for user {user_id}, download_id: {download_id}"
+            f"Download cancelled for user {user_id}, short_id: {short_id}, download_id: {download_id}"
         )
 
 
@@ -247,18 +271,20 @@ async def _send_rate_limit_message(message: Message) -> None:
     await _send_error_message(
         message,
         "Rate Limit Reached",
-        f"You've hit the limit of {MAX_REQUESTS_PER_MINUTE} uploads per minute.\nPlease wait a moment and try again! 🕒"
+        f"You've hit the limit of {MAX_REQUESTS_PER_MINUTE} uploads per minute.\nPlease wait a moment and try again! 🕒",
     )
 
 
-async def _send_file_size_error_message(message: Message, document: object, user: object) -> None:
+async def _send_file_size_error_message(
+    message: Message, document: object, user: object
+) -> None:
     """Send file size limit exceeded message."""
     size_gb = document.file_size / (1024 * 1024 * 1024)
     await _send_error_message(
         message,
         "File Too Large",
         f"Your file ({size_gb:.1f}GB) exceeds the {user.remaining_download_size}MB limit.\n"
-        "💡 Upgrade to a premium account for larger uploads!\nUse the **/premium** command for details."
+        "💡 Upgrade to a premium account for larger uploads!\nUse the **/premium** command for details.",
     )
 
 
@@ -267,15 +293,14 @@ async def _send_concurrent_limit_message(message: Message) -> None:
     await _send_error_message(
         message,
         "Server Busy",
-        f"Too many downloads are in progress (limit: {MAX_CONCURRENT_DOWNLOADS}).\nPlease try again in a moment! 🔄"
+        f"Too many downloads are in progress (limit: {MAX_CONCURRENT_DOWNLOADS}).\nPlease try again in a moment! 🔄",
     )
 
 
 async def _send_error_message(message: Message, title: str, description: str) -> None:
     """Send formatted error message."""
     await message.reply_text(
-        f"🚫 **{title}**\n{description}",
-        parse_mode=ParseMode.MARKDOWN
+        f"🚫 **{title}**\n{description}", parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -287,7 +312,9 @@ async def _process_file_download(
     size_mb = document.file_size / (1024 * 1024)
 
     if download_id not in download_tasks:
-        await message.edit_text("❌ **Download Cancelled or Expired**", parse_mode=ParseMode.MARKDOWN)
+        await message.edit_text(
+            "❌ **Download Cancelled or Expired**", parse_mode=ParseMode.MARKDOWN
+        )
         return
 
     try:
@@ -297,7 +324,7 @@ async def _process_file_download(
             f"📄 **Name**: {document.file_name}\n"
             f"📏 **Size**: {size_mb:.2f} MB\n"
             "⏳ Please wait while we process your file...",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
 
         # Download and save file
@@ -308,7 +335,7 @@ async def _process_file_download(
                 f"📄 **Name**: {document.file_name}\n"
                 f"📏 **Size**: {size_mb:.2f} MB\n"
                 "⏳ Saving to storage...",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
             )
 
             saved_file = await save_file_to_db(
@@ -320,7 +347,9 @@ async def _process_file_download(
             )
 
             # Finalize upload
-            await _finalize_upload(message, progress_msg, saved_file, user, document, size_mb)
+            await _finalize_upload(
+                message, progress_msg, saved_file, user, document, size_mb
+            )
 
         finally:
             _cleanup_temp_file(temp_file_path)
@@ -331,12 +360,20 @@ async def _process_file_download(
             f"📄 **Name**: {document.file_name}\n"
             f"📏 **Size**: {size_mb:.2f} MB\n"
             "😔 Something went wrong during processing.",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
         raise FileProcessingError(str(e))
     finally:
         concurrent_downloads -= 1
         download_tasks.pop(download_id, None)
+        # Clean up mapping by finding the short_id that maps to this download_id
+        short_id_to_remove = None
+        for short_id, full_id in download_mapping.items():
+            if full_id == download_id:
+                short_id_to_remove = short_id
+                break
+        if short_id_to_remove:
+            download_mapping.pop(short_id_to_remove, None)
 
 
 async def _download_file(client: Client, message: Message, document: object) -> str:
@@ -347,7 +384,9 @@ async def _download_file(client: Client, message: Message, document: object) -> 
     with NamedTemporaryFile(dir=temp_dir, delete=False) as temp_file:
         temp_file_path = temp_file.name
         try:
-            logger.info(f"Downloading file: {document.file_name}, ID: {document.file_id}")
+            logger.info(
+                f"Downloading file: {document.file_name}, ID: {document.file_id}"
+            )
             await client.download_media(message, file_name=temp_file_path)
             logger.info(f"File downloaded to: {temp_file_path}")
             return temp_file_path
@@ -389,6 +428,8 @@ async def _finalize_upload(
         f"📋 **Type**: {document.mime_type or 'Unknown'}\n"
         f"🔗 **URL**: {MINIO_BASE_URL}/{relative_path}\n"
         f"💾 **Remaining Storage**: {user.remaining_download_size:.2f} MB",
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode=ParseMode.MARKDOWN,
     )
-    logger.info(f"File {document.file_name} saved successfully for user {message.from_user.id}")
+    logger.info(
+        f"File {document.file_name} saved successfully for user {message.from_user.id}"
+    )
