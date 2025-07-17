@@ -95,7 +95,7 @@ async def handle_document(client: Client, message: Message):
             )
             return
 
-        # TODO add celery for downloads
+        # TODO add celery for downloads and file type checking with magic
         CONCURRENT_DOWNLOADS += 1
         try:
             # Create temporary file for downloading
