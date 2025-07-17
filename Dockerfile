@@ -24,5 +24,7 @@ VOLUME [ "/app/data/" , "app/apps/", "app/apps/config/"]
 # Create directory for Local Bot API Server session files
 RUN mkdir -p /app/data/telegram-bot-api-sessions/
 
+EXPOSE 8000
+
 # RUN 
-CMD uv run manage.py migrate && uv run manage.py runbot --reload
+CMD uv run manage.py migrate && uv run manage.py runbot 0.0.0.0:8000 --reload
