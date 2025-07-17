@@ -170,7 +170,7 @@ async def handle_document(client: Client, message: Message):
             )
 
             user.remaining_download_size -= file_size / (1024 * 1024)
-            user.save(update_fields=["remaining_download_size"])
+            await user.save(update_fields=["remaining_download_size"])
 
             logger.info(
                 f"File {document.file_name} saved successfully for user {user_id}"
@@ -181,7 +181,7 @@ async def handle_document(client: Client, message: Message):
                 f"Error saving file for user {user_id}: {str(e)}",
                 exc_info=True,
             )
-            await message.reply_text(f"❌ Error saving file: {str(e)}")
+            await message.reply_text("❌ Error saving file")
 
     finally:
         CONCURRENT_DOWNLOADS -= 1
