@@ -169,8 +169,8 @@ async def handle_document(client: Client, message: Message):
                 f"✅ File saved successfully!\n"
                 f"📁 Name: {document.file_name}\n"
                 f"📊 Size: {size_mb:.2f} MB\n"
-                f"🔗 URL: {base_minio_url}/{relative_path}"
-                f"Remaining download size is {user.remaining_download_size}"
+                f"🔗 URL: {base_minio_url}/{relative_path}\n"
+                f"📉 Remaining download size: {user.remaining_download_size:.2f} MB"
             )
 
             logger.info(
