@@ -246,3 +246,7 @@ PYROGRAM_SESSION_DIR.mkdir(parents=True, exist_ok=True)
 # Default primary key field type
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# URL SETTING
+STATIC_URL = "/static/"
+STATIC_MEDIA = "/media/"
