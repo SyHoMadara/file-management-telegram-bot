@@ -67,9 +67,7 @@ def get_user(user_id):
         raise
 
 
-@sync_to_async
 def save_file_to_db(user, file_name, temp_file_path, file_size, mime_type):
-    """Save file to database using sync_to_async"""
     try:
         with open(temp_file_path, "rb") as temp_file:
             return FileManager.objects.create(

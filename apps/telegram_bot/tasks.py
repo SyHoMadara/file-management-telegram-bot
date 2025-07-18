@@ -1,5 +1,14 @@
+import tempfile
+from celery.utils.log import logger_isa
 import magic
 from celery import shared_task
+from tempfile import NamedTemporaryFile
+from pyrogram.client import Client
+from handlers.documents import DownloadException, File, SaveFileException
+from utils.utils import save_file_to_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def validate_file_type_sync(
@@ -65,3 +74,26 @@ def detect_file_type_task(file_content):
         return magic.from_buffer(file_content, mime=True)
     except Exception:
         return None
+
+@shared_task
+def save_file_to_db_task(file_properties: File, temp_file_path: str):
+    """Celery task to save a file to the database.
+
+    Args:
+        file_properties: File properties object containing metadata
+        temp_file_path: Path to the temporary file
+
+    Returns:
+        FileManager: The saved file object from the database
+    """
+    try:
+        return save_file_to_db(
+            file_properties.user,
+            file_properties.file_name,
+            temp_file_path,
+            file_properties.file_size,
+            file_properties.document.mime_type
+        )
+    except Exception as e:
+        logger.error(f"Error saving file {file_properties.file_name} to database: {str(e)}")
+        raise SaveFileException(f"Error saving file {file_properties.file_name} to database: {str(e)}")
