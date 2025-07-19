@@ -22,7 +22,9 @@ class FileManager(models.Model):
         null=True,
         blank=True,
     )
-    def remove_old_files(self):
+
+    @staticmethod
+    def remove_old_files():
         from django.utils import timezone
         from datetime import timedelta
 

@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt install -y gcc
 
 RUN --mount=type=cache,target=/var/cache/pip \
-    pip install --cache-dir /var/cache/pip uv
+    pip install --cache-dir /var/cache/pip uv celery
 
 RUN --mount=type=cache,target=/var/cache/uv \
     uv sync --cache-dir /var/cache/uv

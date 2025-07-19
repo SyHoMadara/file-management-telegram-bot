@@ -5,6 +5,7 @@ from celery import shared_task
 
 from apps.telegram_bot.models import File, SaveFileException
 from apps.telegram_bot.utils.utils import save_file_to_db
+from apps.file_manager.models import FileManager
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def remove_old_files_task():
     """Celery task to remove old files from the database."""
     try:
         logger.info("Removing old files from the database...")
-        File.objects.remove_old_files()
+        FileManager.remove_old_files()
         logger.info("Old files removed successfully.")
     except Exception as e:
         logger.error(f"Error removing old files: {str(e)}")
