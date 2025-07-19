@@ -12,16 +12,20 @@ from .models import User
 class UserAdmin(ModelAdmin):
     list_display = (
         "username",
+        "telegram_id",
+        "first_name",
+        "last_name",
         "date_create",
         "date_update",
         "is_verified",
     )
-    search_fields = ("username", "phone_number")
+    search_fields = ("username", "phone_number", "telegram_id" )
     ordering = ("-date_create",)
     list_filter = ("is_staff", "is_active")
     readonly_fields = ("date_create", "date_update", "reset_download_size_button")
     fieldsets = (
         (None, {"fields": ("username", "password")}),
+        ("Personal info", {"fields": ("first_name", "last_name", "telegram_id")}),
         (
             ("Limits"),
             {
