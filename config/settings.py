@@ -170,7 +170,7 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "INFO",
+            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
@@ -181,22 +181,27 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
         "minio_storage": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
         "apps.telegram_bot": {
-            "handlers": ["console"],
-            "level": "INFO",  # Changed to DEBUG for better bot logging
+            "handlers": ["console", "file"],
+            "level": "INFO",
             "propagate": False,
         },
         "pyrogram": {
-            "handlers": ["console"],
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "celery": {
+            "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
         },
