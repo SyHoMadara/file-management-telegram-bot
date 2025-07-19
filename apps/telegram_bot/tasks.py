@@ -1,12 +1,10 @@
-import tempfile
-from celery.utils.log import logger_isa
+import logging
+
 import magic
 from celery import shared_task
-from tempfile import NamedTemporaryFile
-from pyrogram.client import Client
-from handlers.documents import DownloadException, File, SaveFileException
-from utils.utils import save_file_to_db
-import logging
+
+from apps.telegram_bot.models import File, SaveFileException
+from apps.telegram_bot.utils.utils import save_file_to_db
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +73,7 @@ def detect_file_type_task(file_content):
     except Exception:
         return None
 
+
 @shared_task
 def save_file_to_db_task(file_properties: File, temp_file_path: str):
     """Celery task to save a file to the database.
@@ -92,8 +91,12 @@ def save_file_to_db_task(file_properties: File, temp_file_path: str):
             file_properties.file_name,
             temp_file_path,
             file_properties.file_size,
-            file_properties.document.mime_type
+            file_properties.document.mime_type,
         )
     except Exception as e:
-        logger.error(f"Error saving file {file_properties.file_name} to database: {str(e)}")
-        raise SaveFileException(f"Error saving file {file_properties.file_name} to database: {str(e)}")
+        logger.error(
+            f"Error saving file {file_properties.file_name} to database: {str(e)}"
+        )
+        raise SaveFileException(
+            f"Error saving file {file_properties.file_name} to database: {str(e)}"
+        )

@@ -42,11 +42,18 @@ def is_rate_limited(user_id):
 
 
 @sync_to_async
-def create_user_if_not_exists(user_id):
+def create_user_if_not_exists(
+    user_id, telegram_id=None, first_name=None, last_name=None
+):
     """Create user if not exists - async wrapper"""
     try:
         if not User.objects.filter(username=user_id).exists():
-            User.objects.create(username=user_id)
+            User.objects.create(
+                username=user_id,
+                first_name=first_name,
+                last_name=last_name,
+                telegram_id=telegram_id,
+            )
             return True
         return False
     except Exception as e:

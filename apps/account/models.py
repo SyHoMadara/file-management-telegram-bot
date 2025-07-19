@@ -38,6 +38,27 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Required. 150 characters or fewer. Letters, digits and @/._/+/- characters"
         ),
     )
+    telegram_id = models.CharField(
+        max_length=50,
+        verbose_name=_("telegram ID"),
+        help_text=_("identifier for the user in Telegram."),
+        null=True,
+        blank=True,
+    )
+    first_name = models.CharField(
+        max_length=30,
+        verbose_name=_("first name"),
+        help_text=_("Optional. The user's first name."),
+        null=True,
+        blank=True,
+    )
+    last_name = models.CharField(
+        max_length=30,
+        verbose_name=_("last name"),
+        help_text=_("Optional. The user's last name."),
+        null=True,
+        blank=True,
+    )
     remaining_download_size = models.IntegerField(
         default=20,
         verbose_name=_("remaining download size"),

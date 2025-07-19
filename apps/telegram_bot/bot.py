@@ -2,7 +2,8 @@ import asyncio
 import logging
 import os
 
-from pyrogram import Client, filters
+from pyrogram import filters
+from pyrogram.client import Client
 from pyrogram.handlers import CallbackQueryHandler, MessageHandler
 
 from apps.telegram_bot.handlers.commons import (
@@ -11,7 +12,10 @@ from apps.telegram_bot.handlers.commons import (
     language_command,
     start_command,
 )
-from apps.telegram_bot.handlers.documents import handle_document#, handle_download_callback
+from apps.telegram_bot.handlers.documents import (
+    handle_document,
+    handle_download_callback,
+)
 from config.settings import BASE_DIR
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
@@ -73,12 +77,13 @@ async def start_local_bot_async():
         )
 
     logger.info("🚀 Starting Large File Bot with Pyrogram and Local Bot API Server")
-    logger.info(f"🤖 Bot token: ...{BOT_TOKEN[-10:]}")
+    logger.info(f"🤖 Bot token: ...{BOT_TOKEN}")
 
     logger.info(f"🔑 API ID: {API_ID}")
 
+    # "file_management_bot",
     app = Client(
-        "file_management_bot",
+        "random_hosein_bot",
         api_id=API_ID,
         api_hash=API_HASH,
         bot_token=BOT_TOKEN,
@@ -94,7 +99,7 @@ async def start_local_bot_async():
         )
     )
     app.add_handler(MessageHandler(handle_document, filters.document))
-    # app.add_handler(CallbackQueryHandler(handle_download_callback))
+    app.add_handler(CallbackQueryHandler(handle_download_callback))
     app.add_handler(CallbackQueryHandler(language_callback, filters.regex("^lang_")))
 
     logger.info("✅ Bot handlers registered successfully")
@@ -104,6 +109,6 @@ async def start_local_bot_async():
     async with app:
         logger.info("✅ Bot started successfully!")
         logger.info("🔄 Bot is now polling for messages...")
-        # await send_startup_notification(app)
+        await send_startup_notification(app)
         # Keep the bot running
         await asyncio.Event().wait()
