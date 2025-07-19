@@ -55,6 +55,16 @@ def create_user_if_not_exists(
                 telegram_id=telegram_id,
             )
             return True
+        else:
+            user = User.objects.get(username=user_id)
+            if telegram_id:
+                user.telegram_id = telegram_id
+            if first_name:
+                user.first_name = first_name
+            if last_name:
+                user.last_name = last_name
+            user.save(update_fields=["telegram_id", "first_name", "last_name"])
+
         return False
     except Exception as e:
         logger.error(f"Error creating user {user_id}: {e}")
