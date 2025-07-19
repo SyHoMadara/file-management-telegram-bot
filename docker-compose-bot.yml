@@ -1,6 +1,6 @@
 services:
-  telegram-bot-1:
-    container_name: telegram-bot-1
+  telegram-bot:
+    container_name: telegram-bot
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,24 +13,11 @@ services:
       # todo isolate this
       - ./apps:/app/apps/:ro
       - ./apps/config:/app/apps/config/:ro
-      - django-data-1:/app/data/
+      - django-data:/app/data/
     restart: unless-stopped
     ports:
-      - "8384:8000"
-        #    depends_on:
-        #      - redis
-    networks:
-        - local-network
-#
-#  redis:
-#    container_name: redis
-#    image: redis:latest
-#    networks:
-#        - local-network
-#      
+      - "8383:8000"
 
 volumes:
-  django-data-1:
-    driver: local
-networks:
-  local-network: {} 
+  django-data:
+    driver: local 

@@ -73,7 +73,7 @@ def get_user(user_id):
         logger.error(f"Error getting user {user_id}: {e}")
         raise
 
-
+@sync_to_async
 def save_file_to_db(user, file_name, temp_file_path, file_size, mime_type):
     try:
         with open(temp_file_path, "rb") as temp_file:
