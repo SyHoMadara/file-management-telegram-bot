@@ -33,4 +33,4 @@ volumes:
   django-data:
     driver: local
 networks:
-  - local-network: {} 
+  local-network: {} 
