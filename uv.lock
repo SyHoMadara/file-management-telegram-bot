@@ -514,6 +514,12 @@ redis = [
 ]
 
 [[package]]
+name = "libmagic"
+version = "1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/86/419ddfc3879b4565a60e0c75b6d19baec48428cbc2f15aca5320b3d136f6/libmagic-1.0.tar.gz", hash = "sha256:649f1ce7fb7c92796badbb812555e4a926351da4f5cdf82e810b5cd371aedf8d", size = 3665, upload-time = "2012-03-02T17:56:36.681Z" }
+
+[[package]]
 name = "matplotlib-inline"
 version = "0.1.7"
 source = { registry = "https://pypi.org/simple" }
@@ -879,6 +885,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "flower" },
     { name = "ipython" },
+    { name = "libmagic" },
     { name = "pyrogram" },
     { name = "python-dotenv" },
     { name = "python-magic" },
@@ -898,6 +905,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "flower", specifier = ">=2.0.1" },
     { name = "ipython", specifier = ">=9.4.0" },
+    { name = "libmagic", specifier = ">=1.0" },
     { name = "pyrogram", specifier = ">=2.0.106" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "python-magic", specifier = ">=0.4.27" },

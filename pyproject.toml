@@ -15,6 +15,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "flower>=2.0.1",
     "ipython>=9.4.0",
+    "libmagic>=1.0",
     "pyrogram>=2.0.106",
     "python-dotenv>=1.1.1",
     "python-magic>=0.4.27",
