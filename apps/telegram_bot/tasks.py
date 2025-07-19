@@ -93,6 +93,9 @@ def save_file_to_db_task(file_properties: File, temp_file_path: str):
             file_properties.file_size,
             file_properties.document.mime_type,
         )
+        logging.info(
+            f"File {file_properties.file_name} saved to database successfully."
+        )
     except Exception as e:
         logger.error(
             f"Error saving file {file_properties.file_name} to database: {str(e)}"
@@ -100,3 +103,9 @@ def save_file_to_db_task(file_properties: File, temp_file_path: str):
         raise SaveFileException(
             f"Error saving file {file_properties.file_name} to database: {str(e)}"
         )
+
+
+@shared_task
+def example_task():
+    logger.info("Example task started")
+    return "Task completed!"
