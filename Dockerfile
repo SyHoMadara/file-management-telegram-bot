@@ -24,7 +24,7 @@ VOLUME [ "/app/data/" , "app/apps/", "app/apps/config/"]
 # Create directory for Local Bot API Server session files
 RUN mkdir -p /app/data/telegram-bot-api-sessions/
 
-RUN . /apps/.venv/bin/activate
+RUN . /app/.venv/bin/activate
 
 EXPOSE 8000
 
