@@ -17,16 +17,20 @@ services:
     restart: unless-stopped
     ports:
       - "8383:8000"
-    # depends_on:
-    #   - redis
+    depends_on:
+      - redis
+    networks:
+        - local-network
 
-  # redis:
-  #   container_name: redis
-  #   image: redis:latest
-  #   # TODO add network for this.
-  #   ports:
-  #     - "6379:6379"
+  redis:
+    container_name: redis
+    image: redis:latest
+    networks:
+        - local-network
+      
 
 volumes:
   django-data:
     driver: local
+networks:
+  - local-network: {} 
