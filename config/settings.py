@@ -200,7 +200,7 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "celery": {
+        "django_celery_beat": {
             "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,
