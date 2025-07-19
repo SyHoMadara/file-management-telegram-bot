@@ -109,3 +109,14 @@ def save_file_to_db_task(file_properties: File, temp_file_path: str):
 def example_task():
     logger.info("Example task started")
     return "Task completed!"
+
+@shared_task
+def remove_old_files_task():
+    """Celery task to remove old files from the database."""
+    try:
+        logger.info("Removing old files from the database...")
+        File.objects.remove_old_files()
+        logger.info("Old files removed successfully.")
+    except Exception as e:
+        logger.error(f"Error removing old files: {str(e)}")
+        raise e

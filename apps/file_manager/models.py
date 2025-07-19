@@ -2,6 +2,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from config.settings import MINIO_URL_EXPIRY_HOURS
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -21,6 +22,19 @@ class FileManager(models.Model):
         null=True,
         blank=True,
     )
+    def remove_old_files(self):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        threshold_date = timezone.now() - MINIO_URL_EXPIRY_HOURS 
+        old_files = FileManager.objects.filter(created_at__lt=threshold_date)
+
+        for file in old_files:
+            try:
+                file.delete()
+                logger.info(f"Deleted old file: {file.name}")
+            except Exception as e:
+                logger.error(f"Error deleting old file {file.name}: {e}")
 
     def __str__(self):
         return self.name
