@@ -19,9 +19,7 @@ from apps.telegram_bot.models import (
     SaveFileException,
 )
 from apps.telegram_bot.utils.utils import create_user_if_not_exists, get_user, save_file_to_db
-from config.settings import BASE_DIR
-
-from ..tasks import save_file_to_db_task
+from config.settings import BASE_DIR, MINIO_URL_EXPIRY_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -157,15 +155,18 @@ async def _finalize_download(file_properties: File, saved_file: FileManager):
         full_url = saved_file.file.url
         parsed_url = urlsplit(full_url)
         relative_path = parsed_url.path.lstrip("/") + "?" + parsed_url.query
+        expiry_hours = int(MINIO_URL_EXPIRY_HOURS.total_seconds() // 3600)
 
         await file_properties.download_message.edit_text(
             f"✅ <b>{file_properties.file_name}</b> downloaded successfully!\n"
             f"📦 <b>Size:</b> {file_properties.file_size:.2f}MB\n"
             f"🗃️ <b>Remaining Quota:</b> {user.remaining_download_size:.2f}MB\n\n"
-            f"<a href='{MINIO_BASE_URL}/{relative_path}'>🔗 Download Link</a>",
+            f"<a href='{MINIO_BASE_URL}/{relative_path}'>🔗 Download Link</a>\n\n"
+            f"⏳ <i>This link will expire in {expiry_hours} hour(s).</i>",
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
+        
     except Exception as e:
         logger.error(f"Finalize error: {str(e)}")
         await file_properties.download_message.edit_text("❌ Failed to complete the download.")
