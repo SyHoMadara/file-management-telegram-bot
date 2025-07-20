@@ -2,6 +2,8 @@
 
 ![Bot Demo](telegram_preview_bot.gif)
 
+> 🤖 **Live Bot**: Try it now at [@file_download_management_bot](https://t.me/file_download_management_bot)
+
 A powerful and feature-rich Telegram bot built with Django and MinIO for efficient file management and storage. This bot allows users to upload, store, and download files up to 2GB with automatic storage cleanup using Celery Beat.
 
 ## ✨ Features
