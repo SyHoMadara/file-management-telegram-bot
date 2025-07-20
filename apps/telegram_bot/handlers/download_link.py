@@ -64,15 +64,31 @@ async def handle_video_link(client: Client, message: Message):
         await _process_video_info(client, message, user, download_message, url, video_info)
     except VideoInfoException as e:
         logger.error(f"Video info error for user {user.username}: {str(e)}")
-        await download_message.edit_text(
-            "❌ <b>Failed to analyze video</b>\n\n"
-            "This might happen if:\n"
-            "• The video is private or restricted\n"
-            "• The URL is invalid or not supported\n"
-            "• The platform is temporarily unavailable\n\n"
-            "Please try again or use a different URL.",
-            parse_mode=ParseMode.HTML
-        )
+        error_msg = str(e).lower()
+        
+        if "sign in" in error_msg or "bot" in error_msg or "cookies" in error_msg:
+            await download_message.edit_text(
+                "❌ <b>YouTube Bot Detection</b>\n\n"
+                "YouTube is currently blocking automated requests. This can happen when:\n"
+                "• Too many requests are made in a short time\n"
+                "• YouTube's anti-bot measures are active\n\n"
+                "🔄 <b>Please try:</b>\n"
+                "• Waiting a few minutes before trying again\n"
+                "• Using a different video URL\n"
+                "• Trying again later when traffic is lower\n\n"
+                "💡 <i>This is a temporary YouTube restriction, not a bot issue.</i>",
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            await download_message.edit_text(
+                "❌ <b>Failed to analyze video</b>\n\n"
+                "This might happen if:\n"
+                "• The video is private or restricted\n"
+                "• The URL is invalid or not supported\n"
+                "• The platform is temporarily unavailable\n\n"
+                "Please try again or use a different URL.",
+                parse_mode=ParseMode.HTML
+            )
     except Exception as e:
         logger.error(f"Unexpected error for user {user.username}: {str(e)}")
         await download_message.edit_text("❌ An unexpected error occurred while processing the video.")
@@ -86,6 +102,26 @@ async def _get_video_info(url: str) -> dict:
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
+            # Add user agent and other headers to avoid bot detection
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+            },
+            # Add extractor args for YouTube
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['dash', 'hls'],  # Skip DASH and HLS to avoid some bot detection
+                    'player_client': ['android', 'web'],  # Try multiple clients
+                }
+            },
+            # Add some delay to avoid rate limiting
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
         }
         
         def extract_info():
@@ -98,7 +134,34 @@ async def _get_video_info(url: str) -> dict:
         return info
     except Exception as e:
         logger.error(f"Error extracting video info from {url[:50]}...: {str(e)}")
-        raise VideoInfoException("Failed to extract video information.")
+        
+        # Try a fallback with simplified options
+        try:
+            logger.info("Attempting fallback extraction with simplified options...")
+            fallback_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],  # Android client often works better
+                    }
+                },
+            }
+            
+            def fallback_extract():
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+            
+            info = await asyncio.get_event_loop().run_in_executor(None, fallback_extract)
+            logger.info("Fallback extraction successful!")
+            return info
+        except Exception as fallback_error:
+            logger.error(f"Fallback extraction also failed: {str(fallback_error)}")
+            raise VideoInfoException("Failed to extract video information. YouTube may be blocking requests.")
 
 
 async def _process_video_info(client: Client, message: Message, user, download_message: Message, url: str, video_info: dict):
@@ -386,13 +449,35 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
     logger.info(f"Starting {'audio' if is_audio_only else 'video'} download - Format: {format_id}")
     
     try:
-        # Prepare yt-dlp options
+        # Base options with anti-bot detection measures
+        base_opts = {
+            'outtmpl': f'{temp_file.name}.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+            # Add headers to avoid bot detection
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Connection': 'keep-alive',
+            },
+            # Extractor args for YouTube
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                }
+            },
+            # Add delay to avoid rate limiting
+            'sleep_interval': 1,
+            'max_sleep_interval': 3,
+        }
+        
+        # Prepare format-specific options
         if is_audio_only:
             ydl_opts = {
+                **base_opts,
                 'format': 'bestaudio/best',
-                'outtmpl': f'{temp_file.name}.%(ext)s',
-                'quiet': True,
-                'no_warnings': True,
                 'extractaudio': True,
                 'audioformat': 'mp3',
                 'audioquality': '192K',
@@ -400,17 +485,13 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
         else:
             if format_id:
                 ydl_opts = {
+                    **base_opts,
                     'format': format_id,
-                    'outtmpl': f'{temp_file.name}.%(ext)s',
-                    'quiet': True,
-                    'no_warnings': True,
                 }
             else:
                 ydl_opts = {
+                    **base_opts,
                     'format': 'best[height<=720]',  # Default to 720p if no format specified
-                    'outtmpl': f'{temp_file.name}.%(ext)s',
-                    'quiet': True,
-                    'no_warnings': True,
                 }
         
         def download():
@@ -423,12 +504,24 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
         # Close the temp file before searching for downloaded files
         temp_file.close()
         
-        # Find the downloaded file (yt-dlp adds extension)
+        # Debug: Check what files were actually created
         temp_dir = os.path.dirname(temp_file.name)
         temp_basename = os.path.basename(temp_file.name)
         
+        logger.info(f"Temp directory: {temp_dir}")
+        logger.info(f"Looking for files starting with: {temp_basename}")
+        
         all_files = os.listdir(temp_dir)
+        logger.info(f"All files in temp directory: {all_files}")
+        
         downloaded_files = [f for f in all_files if f.startswith(temp_basename)]
+        logger.info(f"Matching downloaded files: {downloaded_files}")
+        
+        # Debug: Check file sizes
+        for file in downloaded_files:
+            file_path = os.path.join(temp_dir, file)
+            file_size = os.path.getsize(file_path)
+            logger.info(f"File {file}: {file_size} bytes")
         
         if not downloaded_files:
             logger.error("No file was downloaded by yt-dlp")
@@ -441,6 +534,8 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
             raise DownloadException("Downloaded file not found")
             
         file_size = os.path.getsize(downloaded_file_path)
+        logger.info(f"Final selected file: {downloaded_file_path} - Size: {file_size} bytes")
+        
         if file_size == 0:
             raise DownloadException("Downloaded file is empty")
         
