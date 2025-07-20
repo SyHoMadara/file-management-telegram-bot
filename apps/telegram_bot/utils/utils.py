@@ -86,14 +86,23 @@ def get_user(user_id):
 @sync_to_async
 def save_file_to_db(user, file_name, temp_file_path, file_size, mime_type):
     try:
+        # Basic validation
+        if not os.path.exists(temp_file_path):
+            raise FileNotFoundError(f"Temp file not found: {temp_file_path}")
+        
+        if os.path.getsize(temp_file_path) == 0:
+            raise ValueError(f"Temp file is empty: {temp_file_path}")
+        
         with open(temp_file_path, "rb") as temp_file:
-            return FileManager.objects.create(
+            file_manager = FileManager.objects.create(
                 user=user,
                 name=file_name,
                 file=File(temp_file, name=file_name),
                 file_size=file_size,
                 file_mime_type=mime_type or "application/octet-stream",
             )
+            logger.info(f"File saved to database: {file_name} ({file_size:.2f}MB)")
+            return file_manager
     except Exception as e:
         logger.error(f"Error saving file {file_name} to database: {e}")
         raise

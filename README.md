@@ -106,7 +106,7 @@ docker-compose -f docker-compose-minio.yml up -d
 ### 4. Start the Bot Backend
 
 ```bash
-docker-compose -f docker-compose-bot.yml up -d
+docker-compose -f docker-compose-bot.yml up -d --build
 ```
 
 ## 🔧 Access Points

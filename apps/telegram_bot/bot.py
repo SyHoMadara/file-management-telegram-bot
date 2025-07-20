@@ -16,6 +16,10 @@ from apps.telegram_bot.handlers.documents import (
     handle_document,
     handle_download_callback,
 )
+from apps.telegram_bot.handlers.download_link import (
+    handle_video_link,
+    handle_video_download_callback,
+)
 from config.settings import BASE_DIR
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_API_TOKEN", "")
@@ -91,16 +95,38 @@ async def start_local_bot_async():
     )
 
     # Register handlers
+    logger.info("🔧 Registering bot handlers...")
+    
     app.add_handler(MessageHandler(start_command, filters.command("start")))
+    logger.info("✅ Registered: /start command")
+    
     app.add_handler(MessageHandler(help_command, filters.command("help")))
+    logger.info("✅ Registered: /help command")
+    
     app.add_handler(
         MessageHandler(
             language_command, filters.command("lang") | filters.command("language")
         )
     )
+    logger.info("✅ Registered: /lang and /language commands")
+    
+    # Document handlers
     app.add_handler(MessageHandler(handle_document, filters.document))
-    app.add_handler(CallbackQueryHandler(handle_download_callback))
-    app.add_handler(CallbackQueryHandler(language_callback, filters.regex("^lang_")))
+    logger.info("✅ Registered: Document handler")
+    
+    # Video link handlers (for URLs containing http/https)
+    app.add_handler(MessageHandler(handle_video_link, filters.text & filters.regex(r'https?://')))
+    logger.info("✅ Registered: Video link handler (URLs with http/https)")
+    
+    # Callback handlers - order matters! More specific patterns first
+    app.add_handler(CallbackQueryHandler(handle_video_download_callback, filters.regex(r"^(download_video_|download_audio_|cancel_video_download)")))
+    logger.info("✅ Registered: Video download callback handler")
+    
+    app.add_handler(CallbackQueryHandler(language_callback, filters.regex(r"^lang_")))
+    logger.info("✅ Registered: Language callback handler")
+    
+    app.add_handler(CallbackQueryHandler(handle_download_callback, filters.regex(r"^download_file_|^cancel_download$")))
+    logger.info("✅ Registered: Document download callback handler")
 
     logger.info("✅ Bot handlers registered successfully")
     logger.info("🔄 Starting bot...")
