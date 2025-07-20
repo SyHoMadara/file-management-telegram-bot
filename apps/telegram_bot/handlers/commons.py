@@ -37,13 +37,6 @@ async def start_command(client: Client, message: Message):
     start_message = _(
         "🤖 Large File Storage Bot!\n\n"
         "📁 Send me any file and I'll store it.\n\n"
-        "💡 Features:\n"
-        "• Files up to 2GB (2048MB)\n"
-        "• Fast downloads via local server\n"
-        "• Direct storage to MinIO\n\n"
-        "⚠️ Rate Limits:\n"
-        "• Max %(max_requests)d files per minute per user\n"
-        "• Max %(max_downloads)d downloads at once\n\n"
         "Just send a file to get started! 📤"
     )
 
