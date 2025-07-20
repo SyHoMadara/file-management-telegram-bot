@@ -19,7 +19,11 @@ from apps.telegram_bot.models import (
     FileTempException,
     SaveFileException,
 )
-from apps.telegram_bot.utils.utils import create_user_if_not_exists, get_user, save_file_to_db
+from apps.telegram_bot.utils.utils import (
+    create_user_if_not_exists,
+    get_user,
+    save_file_to_db,
+)
 from config.settings import BASE_DIR, MINIO_URL_EXPIRY_HOURS
 
 logger = logging.getLogger(__name__)
@@ -112,16 +116,16 @@ async def _get_video_info(url: str) -> dict:
                 'Keep-Alive': '300',
                 'Connection': 'keep-alive',
             },
-            # Add extractor args for YouTube
+            # Add extractor args for YouTube - use multiple clients for maximum format extraction
             'extractor_args': {
                 'youtube': {
-                    'skip': ['dash', 'hls'],  # Skip DASH and HLS to avoid some bot detection
-                    'player_client': ['android', 'web'],  # Try multiple clients
+                    'player_client': ['android', 'web', 'ios'],  # Try multiple clients
+                    'player_skip': [],  # Don't skip any players
                 }
             },
-            # Add some delay to avoid rate limiting
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
+            # Force extraction of all available formats
+            'format_sort': ['res', 'ext'],  # Sort by resolution and extension
+            'listformats': False,  # Don't just list, actually extract info
         }
         
         def extract_info():
@@ -250,7 +254,7 @@ def _format_duration(seconds: int) -> str:
 
 
 def _get_available_formats(video_info: dict) -> list:
-    """Extract and filter available video formats"""
+    """Extract and filter available video formats, prioritizing reliable downloads"""
     formats = video_info.get('formats', [])
     if not formats:
         logger.warning("No formats found in video info")
@@ -258,38 +262,183 @@ def _get_available_formats(video_info: dict) -> list:
     
     logger.info(f"Processing {len(formats)} total formats from video info")
     
-    # Filter and sort formats
-    video_formats = []
-    seen_qualities = set()
+    # Debug: Log all formats to understand what we're getting vs CLI
+    logger.info("All available formats from yt-dlp:")
+    for i, fmt in enumerate(formats):
+        logger.info(f"Format {i+1}: ID={fmt.get('format_id')}, "
+                   f"height={fmt.get('height')}, width={fmt.get('width')}, "
+                   f"resolution={fmt.get('resolution')}, note={fmt.get('format_note')}, "
+                   f"vcodec={fmt.get('vcodec')}, acodec={fmt.get('acodec')}, "
+                   f"ext={fmt.get('ext')}, protocol={fmt.get('protocol')}")
+    
+    # Group formats by quality and find the best (most reliable) for each quality
+    quality_groups = {}
     
     for fmt in formats:
-        if not fmt.get('vcodec') or fmt.get('vcodec') == 'none':
-            continue  # Skip audio-only formats
-            
-        height = fmt.get('height', 0)
-        filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
-        ext = fmt.get('ext', 'mp4')
-        format_id = fmt.get('format_id', '')
+        # Skip audio-only formats (no video codec), storyboards, and image formats
+        vcodec = fmt.get('vcodec', 'none')
+        ext = fmt.get('ext', '')
+        format_note = fmt.get('format_note', '')
         
-        if height and height > 0:
+        if (vcodec == 'none' or vcodec is None or 
+            ext in ['mhtml', 'jpg', 'png', 'webp'] or
+            'storyboard' in format_note.lower()):
+            continue
+            
+        # Get quality information - try multiple fields
+        height = fmt.get('height', 0)
+        resolution = fmt.get('resolution', '')
+        format_id = fmt.get('format_id', '')
+        filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
+        protocol = fmt.get('protocol', 'https')
+        
+        # Determine quality label from multiple sources
+        quality_label = None
+        quality_height = 0
+        
+        # For YouTube Shorts and portrait videos, use the smaller dimension (width) as quality
+        width = fmt.get('width', 0)
+        if height and width and height > width:
+            # Portrait video (height > width) - use width as quality indicator
+            quality_label = f"{width}p"
+            quality_height = width
+        elif height and height > 0:
+            # Regular landscape video - use height
             quality_label = f"{height}p"
-            if quality_label not in seen_qualities:
-                seen_qualities.add(quality_label)
-                video_formats.append({
-                    'format_id': format_id,
-                    'quality': quality_label,
-                    'height': height,
-                    'filesize': filesize,
-                    'ext': ext,
-                    'filesize_mb': (filesize / (1024 * 1024)) if filesize else 0
-                })
+            quality_height = height
+        elif resolution and 'x' in resolution:
+            # Parse resolution like "1280x720" or "360x640"
+            try:
+                res_width, res_height = resolution.split('x')
+                res_width, res_height = int(res_width), int(res_height)
+                if res_height > res_width:
+                    # Portrait: use width as quality
+                    quality_height = res_width
+                    quality_label = f"{res_width}p"
+                else:
+                    # Landscape: use height as quality
+                    quality_height = res_height
+                    quality_label = f"{res_height}p"
+            except (ValueError, AttributeError):
+                pass
+        elif format_note:
+            # Extract quality from format_note like "720p", "1080p60", etc.
+            import re
+            quality_match = re.search(r'(\d+)p', format_note)
+            if quality_match:
+                quality_height = int(quality_match.group(1))
+                quality_label = f"{quality_height}p"
+        
+        # For well-known YouTube format IDs, use hardcoded mappings
+        if not quality_label:
+            format_quality_map = {
+                # Progressive MP4 formats
+                '18': ('360p', 360),   # MP4 360p
+                '22': ('720p', 720),   # MP4 720p  
+                '37': ('1080p', 1080), # MP4 1080p
+                '38': ('3072p', 3072), # MP4 4K
+                # Adaptive MP4 formats (video only) - PREFER THESE
+                '133': ('240p', 240),  # MP4 240p (video only)
+                '134': ('360p', 360),  # MP4 360p (video only)
+                '135': ('480p', 480),  # MP4 480p (video only)
+                '136': ('720p', 720),  # MP4 720p (video only)
+                '137': ('1080p', 1080), # MP4 1080p (video only)
+                '138': ('2160p', 2160), # MP4 4K (video only)
+                # High frame rate formats
+                '298': ('720p60', 720),  # MP4 720p60
+                '299': ('1080p60', 1080), # MP4 1080p60
+                # WebM formats
+                '242': ('240p', 240),  # WebM 240p
+                '243': ('360p', 360),  # WebM 360p
+                '244': ('480p', 480),  # WebM 480p
+                '247': ('720p', 720),  # WebM 720p
+                '248': ('1080p', 1080), # WebM 1080p
+                # VP9 formats
+                '278': ('144p', 144),  # WebM 144p VP9
+                '394': ('144p', 144),  # MP4 144p AV1
+                '395': ('240p', 240),  # MP4 240p AV1
+                '396': ('360p', 360),  # MP4 360p AV1
+                '397': ('480p', 480),  # MP4 480p AV1
+                '398': ('720p', 720),  # MP4 720p AV1
+                '399': ('1080p', 1080), # MP4 1080p AV1
+                # 3D formats
+                '82': ('360p', 360),   # MP4 360p 3D
+                '83': ('480p', 480),   # MP4 480p 3D  
+                '84': ('720p', 720),   # MP4 720p 3D
+                '85': ('1080p', 1080), # MP4 1080p 3D
+            }
+            if format_id in format_quality_map:
+                quality_label, quality_height = format_quality_map[format_id]
+        
+        # If we still don't have a quality, use format_id as fallback
+        if not quality_label:
+            quality_label = f"Format {format_id}"
+            quality_height = 0
+        
+        # Calculate reliability score to prioritize formats
+        reliability_score = 0
+        
+        # Prefer https protocol over m3u8/hls (m3u8 formats often fail)
+        if protocol == 'https':
+            reliability_score += 100
+        elif protocol in ['m3u8', 'hls', 'm3u8_native']:
+            reliability_score += 10  # Lower priority but still usable
+        
+        # Prefer mp4 over webm, prefer known formats
+        if ext == 'mp4':
+            reliability_score += 50
+        elif ext == 'webm':
+            reliability_score += 30
+        
+        # Prefer formats with filesize info
+        if filesize and filesize > 0:
+            reliability_score += 20
+        
+        # Prefer non-3D, non-HDR formats for general use
+        if '3D' not in format_note and 'HDR' not in format_note:
+            reliability_score += 10
+        
+        # Prefer non-"Untested" formats
+        if 'Untested' not in format_note:
+            reliability_score += 30
+        
+        # Group by quality and keep the most reliable format for each quality
+        if quality_label not in quality_groups:
+            quality_groups[quality_label] = []
+        
+        quality_groups[quality_label].append({
+            'format_id': format_id,
+            'quality': quality_label,
+            'height': quality_height,
+            'filesize': filesize,
+            'ext': ext,
+            'filesize_mb': (filesize / (1024 * 1024)) if filesize else 0,
+            'vcodec': vcodec,
+            'format_note': format_note,
+            'protocol': protocol,
+            'reliability_score': reliability_score,
+        })
     
-    # Sort by quality (height) descending
-    video_formats.sort(key=lambda x: x['height'], reverse=True)
+    # Select the best format for each quality
+    video_formats = []
+    for quality_label, formats_for_quality in quality_groups.items():
+        # Sort by reliability score (highest first)
+        formats_for_quality.sort(key=lambda x: x['reliability_score'], reverse=True)
+        best_format = formats_for_quality[0]
+        
+        logger.info(f"Quality {quality_label}: Selected format {best_format['format_id']} "
+                   f"(protocol: {best_format['protocol']}, score: {best_format['reliability_score']}) "
+                   f"over {len(formats_for_quality)-1} alternatives")
+        
+        video_formats.append(best_format)
     
-    # Limit to top 8 qualities to avoid inline keyboard limits
-    final_formats = video_formats[:8]
+    # Sort by quality (height) descending, with fallback for unknown heights
+    video_formats.sort(key=lambda x: (x['height'] if x['height'] > 0 else -1), reverse=True)
     
+    # Limit to top 10 qualities to avoid inline keyboard limits
+    final_formats = video_formats[:10]
+    
+    logger.info(f"Found {len(final_formats)} video formats: {[f['quality'] + ' (' + f['format_id'] + ')' for f in final_formats]}")
     return final_formats
 
 
@@ -327,7 +476,7 @@ async def handle_video_download_callback(client: Client, callback_query):
                 logger.error(f"Invalid callback data format: {data}")
                 await callback_query.answer("❌ Invalid request format.", show_alert=True)
                 return
-                
+
             video_id = parts[2]
             format_id = parts[3]
             
@@ -382,13 +531,11 @@ async def _download_video(client: Client, video_properties: File, format_id: str
     url = video_properties.extra_data['url']
     title = video_properties.extra_data['title']
     
-    # Remove video from set to free memory
-    video_download_set.pop(video_properties.id, None)
     logger.info(f"Starting {'audio' if is_audio_only else 'video'} download for {title} (format: {format_id})")
     
     await video_properties.download_message.edit_text(
         f"📥 <b>Downloading:</b> {title}\n"
-        f"🎬 <b>Quality:</b> {'Audio Only' if is_audio_only else f'Video ({format_id})'}\n"
+        f"🎬 <b>Quality:</b> {'Audio Only' if is_audio_only else _get_quality_display_name(format_id, video_properties)}\n"
         f"⏳ Please wait...",
         parse_mode=ParseMode.HTML
     )
@@ -396,7 +543,7 @@ async def _download_video(client: Client, video_properties: File, format_id: str
     temp_file = None
     try:
         temp_file = await _create_temp_file()
-        downloaded_file_path = await _download_video_to_temp(url, temp_file, format_id, is_audio_only)
+        downloaded_file_path = await _download_video_to_temp(url, temp_file, format_id, is_audio_only, video_properties)
         
         # Get actual file size
         file_size_bytes = os.path.getsize(downloaded_file_path)
@@ -431,6 +578,8 @@ async def _download_video(client: Client, video_properties: File, format_id: str
     finally:
         if temp_file:
             await _clear_temp_file(temp_file)
+        # Remove video from set to free memory (do this at the end)
+        video_download_set.pop(video_properties.id, None)
 
 
 async def _create_temp_file():
@@ -444,7 +593,7 @@ async def _create_temp_file():
         raise FileTempException("Temporary file creation failed.")
 
 
-async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is_audio_only: bool = False) -> str:
+async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is_audio_only: bool = False, video_properties: File = None) -> str:
     """Download video to temporary file using yt-dlp"""
     logger.info(f"Starting {'audio' if is_audio_only else 'video'} download - Format: {format_id}")
     
@@ -473,7 +622,7 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
             'max_sleep_interval': 3,
         }
         
-        # Prepare format-specific options
+        # Prepare format-specific options with fallback
         if is_audio_only:
             ydl_opts = {
                 **base_opts,
@@ -484,19 +633,58 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
             }
         else:
             if format_id:
+                # Try specific format first, with intelligent fallbacks
+                # Get the actual quality/height from the video properties
+                selected_format_height = None
+                
+                if video_properties and 'formats' in video_properties.extra_data:
+                    for fmt in video_properties.extra_data['formats']:
+                        if fmt['format_id'] == format_id:
+                            selected_format_height = fmt.get('height', 0)
+                            break
+                
+                # Build format string with intelligent fallbacks
+                format_string = format_id
+                
+                # Add fallbacks based on actual quality, not format ID number
+                if selected_format_height and selected_format_height > 0:
+                    # For specific quality, add fallbacks around that quality
+                    format_string += f"/best[height<={selected_format_height}]"
+                    if selected_format_height >= 720:
+                        format_string += "/best[height<=720]"
+                    format_string += "/best"
+                else:
+                    # Generic fallback if we can't determine quality
+                    format_string += "/best"
+                
                 ydl_opts = {
                     **base_opts,
-                    'format': format_id,
+                    'format': format_string,
                 }
+                logger.info(f"Using format string for format_id {format_id} (height: {selected_format_height}): {format_string}")
             else:
                 ydl_opts = {
                     **base_opts,
-                    'format': 'best[height<=720]',  # Default to 720p if no format specified
+                    'format': 'best[height<=720]/best',  # Default to 720p with fallback
                 }
         
         def download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            except Exception as e:
+                # If specific format fails, try with a more generic format
+                logger.warning(f"Download failed with specific format, trying fallback: {str(e)}")
+                if not is_audio_only and format_id:
+                    fallback_opts = {
+                        **base_opts,
+                        'format': 'best[height<=720]/best',  # Fallback to best available
+                    }
+                    logger.info("Attempting download with fallback format: best[height<=720]/best")
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                        ydl.download([url])
+                else:
+                    raise
         
         # Run download in executor to avoid blocking
         await asyncio.get_event_loop().run_in_executor(None, download)
@@ -526,9 +714,24 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
         if not downloaded_files:
             logger.error("No file was downloaded by yt-dlp")
             raise DownloadException("No file was downloaded")
-            
-        downloaded_file_path = os.path.join(temp_dir, downloaded_files[0])
         
+        # Select the largest file (actual video, not empty temp file)
+        downloaded_file_path = None
+        largest_size = 0
+        
+        for file in downloaded_files:
+            file_path = os.path.join(temp_dir, file)
+            file_size = os.path.getsize(file_path)
+            
+            # Select the file with the largest size (this will be the actual video)
+            if file_size > largest_size:
+                largest_size = file_size
+                downloaded_file_path = file_path
+        
+        if not downloaded_file_path:
+            logger.error("No valid downloaded file found")
+            raise DownloadException("No valid downloaded file found")
+            
         # Validate downloaded file
         if not os.path.exists(downloaded_file_path):
             raise DownloadException("Downloaded file not found")
@@ -620,3 +823,19 @@ async def _clear_temp_file(temp_file):
     except Exception as e:
         logger.error(f"Error removing temp files: {str(e)}")
         raise FileTempException("Failed to delete temporary files.")
+
+
+def _get_quality_display_name(format_id: str, video_properties: File) -> str:
+    """Get the display name for a quality based on format ID"""
+    if not format_id or not video_properties:
+        return f"Video ({format_id})"
+    
+    # Look up the quality from the stored format data
+    if 'formats' in video_properties.extra_data:
+        for fmt in video_properties.extra_data['formats']:
+            if fmt['format_id'] == format_id:
+                quality = fmt.get('quality', f"Format {format_id}")
+                return f"Video - {quality}"
+    
+    # Fallback if format not found
+    return f"Video ({format_id})"
