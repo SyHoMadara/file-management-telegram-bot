@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
     ports:
       - "8383:8000"
+      - "5555:5555"
 
 volumes:
   django-data:

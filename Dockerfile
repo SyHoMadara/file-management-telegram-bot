@@ -26,6 +26,7 @@ RUN mkdir -p /app/data/telegram-bot-api-sessions/
 
 
 EXPOSE 8000
+EXPOSE 5555
 
 # RUN 
 CMD . .venv/bin/activate && ./run_celery.sh && uv run manage.py migrate && uv run manage.py runserver 0.0.0.0:8000 & uv run manage.py runbot --reload  
