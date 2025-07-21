@@ -10,6 +10,7 @@ from apps.telegram_bot.handlers.commons import (
     help_command,
     language_callback,
     language_command,
+    premium_command,
     start_command,
 )
 from apps.telegram_bot.handlers.documents import (
@@ -102,6 +103,9 @@ async def start_local_bot_async():
     
     app.add_handler(MessageHandler(help_command, filters.command("help")))
     logger.info("✅ Registered: /help command")
+    
+    app.add_handler(MessageHandler(premium_command, filters.command("premium")))
+    logger.info("✅ Registered: /premium command")
     
     app.add_handler(
         MessageHandler(

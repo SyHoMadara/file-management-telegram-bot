@@ -13,6 +13,8 @@ A powerful and feature-rich Telegram bot built with Django and MinIO for efficie
 - 🎛️ **Quality Selection**: Choose from multiple video qualities via inline buttons
 - 🍪 **Anti-Bot Protection**: Cookie support to bypass YouTube restrictions
 - 🔐 **User Management**: Premium user system with download quotas
+- 💎 **Premium Requests**: Users can request premium access via `/premium` command
+- 🔔 **Admin Notifications**: Automatic notifications for premium requests and promotions
 - ⏰ **Automatic Cleanup**: Celery Beat tasks for storage management
 - 🌐 **Multi-language Support**: English and Persian (Farsi)
 - 📊 **Admin Panel**: Django admin interface for management
@@ -141,7 +143,8 @@ docker-compose -f docker-compose-bot.yml up -d --build
 ### Bot Commands
 
 - `/start` - Initialize the bot and create user account
-- `/help` - Display help information
+- `/help` - Display help information and available features
+- `/premium` - Request premium access for unlimited downloads
 - `/lang` or `/language` - Change bot language (English/Persian)
 
 ### File Operations
@@ -152,7 +155,10 @@ docker-compose -f docker-compose-bot.yml up -d --build
    - Choose between video or audio-only downloads
    - Bot automatically finds the best available formats
 3. **Download**: Click the download button to get a secure download link
-4. **Quota**: Premium users get higher download limits
+4. **Premium Access**: Use `/premium` command to request unlimited downloads
+   - Admins receive automatic notifications for new requests
+   - Users are notified when promoted to premium status
+5. **Quota Management**: Premium users get higher download limits
 
 ### Video Download Features
 
@@ -199,6 +205,40 @@ To bypass YouTube's bot detection and access more video formats, you can add bro
 - Support for age-restricted content
 
 See `data/cookies/README.md` for detailed instructions.
+
+## 💎 Premium System
+
+The bot includes a comprehensive premium user management system:
+
+### For Users
+- **Request Premium**: Use `/premium` command to request premium access
+- **Anti-Spam Protection**: System prevents duplicate requests
+- **Status Check**: Command shows if you're already premium
+- **Automatic Notifications**: Get notified when promoted to premium
+
+### For Administrators
+- **Request Notifications**: Receive instant notifications when users request premium
+- **Admin Panel**: Manage premium users through Django admin interface
+- **User Information**: View detailed user info including:
+  - Full name and username
+  - Telegram user ID
+  - Request date and time
+  - Premium status and request history
+- **Easy Promotion**: Simply set `is_premium=True` in admin panel
+- **Automatic Notifications**: Users are automatically notified when promoted
+
+### Premium Features
+- **Unlimited Downloads**: No daily download limits
+- **Priority Processing**: Faster file processing
+- **Enhanced Speeds**: Improved download performance
+- **All File Formats**: Access to all supported file types
+
+### Admin Workflow
+1. User sends `/premium` command
+2. Admin receives notification with user details
+3. Admin reviews request in Django admin panel
+4. Admin promotes user by setting `is_premium=True`
+5. User automatically receives promotion notification
 
 ## 🛠️ Development
 
@@ -264,9 +304,11 @@ telbot_downloader/
 ## 🔒 Security Features
 
 - **User Quotas**: Prevent abuse with download limits
+- **Premium System**: Request-based premium access with admin approval
+- **Anti-Spam Protection**: Prevents duplicate premium requests
 - **File Validation**: MIME type checking (commented code available)
 - **Secure URLs**: Time-limited download links
-- **Admin Controls**: Full administrative oversight
+- **Admin Controls**: Full administrative oversight with notification system
 
 ## 📈 Monitoring & Logs
 

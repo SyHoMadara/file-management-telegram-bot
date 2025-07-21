@@ -74,6 +74,17 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name=_("is premium"),
         help_text=_("Designates whether this user has a premium account."),
     )
+    premium_requested = models.BooleanField(
+        default=False,
+        verbose_name=_("premium requested"),
+        help_text=_("Designates whether this user has requested premium access."),
+    )
+    premium_request_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("premium request date"),
+        help_text=_("The date when the user requested premium access."),
+    )
     is_verified = models.BooleanField(
         default=True,
         verbose_name=_("is verified"),

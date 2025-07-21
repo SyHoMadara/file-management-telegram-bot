@@ -15,14 +15,16 @@ class UserAdmin(ModelAdmin):
         "telegram_id",
         "first_name",
         "last_name",
+        "is_premium",
+        "premium_requested",
         "date_create",
         "date_update",
         "is_verified",
     )
     search_fields = ("username", "phone_number", "telegram_id" )
     ordering = ("-date_create",)
-    list_filter = ("is_staff", "is_active")
-    readonly_fields = ("date_create", "date_update", "reset_download_size_button")
+    list_filter = ("is_staff", "is_active", "is_premium", "premium_requested")
+    readonly_fields = ("date_create", "date_update", "premium_request_date", "reset_download_size_button")
     fieldsets = (
         (None, {"fields": ("username", "password")}),
         ("Personal info", {"fields": ("first_name", "last_name", "telegram_id")}),
@@ -33,6 +35,8 @@ class UserAdmin(ModelAdmin):
                     "remaining_download_size",
                     "maximum_download_size_per_day",
                     "is_premium",
+                    "premium_requested",
+                    "premium_request_date",
                     "reset_download_size_button",
                 )
             },
