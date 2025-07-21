@@ -123,7 +123,7 @@ async def start_local_bot_async():
     logger.info("✅ Registered: Video link handler (URLs with http/https)")
     
     # Callback handlers - order matters! More specific patterns first
-    app.add_handler(CallbackQueryHandler(handle_video_download_callback, filters.regex(r"^(download_video_|download_audio_|cancel_video_download)")))
+    app.add_handler(CallbackQueryHandler(handle_video_download_callback, filters.regex(r"^(download_video_|download_audio_|size_error_|cancel_video_download)")))
     logger.info("✅ Registered: Video download callback handler")
     
     app.add_handler(CallbackQueryHandler(language_callback, filters.regex(r"^lang_")))

@@ -15,6 +15,9 @@ A powerful and feature-rich Telegram bot built with Django and MinIO for efficie
 - 🔐 **User Management**: Premium user system with download quotas
 - 💎 **Premium Requests**: Users can request premium access via `/premium` command
 - 🔔 **Admin Notifications**: Automatic notifications for premium requests and promotions
+- 📊 **Download Quotas**: Daily download limits with premium/regular user tiers
+- ⚠️ **Size Validation**: Pre-download file size validation with quota warnings
+- 📏 **Smart Limits**: Different file size limits for premium vs regular users
 - ⏰ **Automatic Cleanup**: Celery Beat tasks for storage management
 - 🌐 **Multi-language Support**: English and Persian (Farsi)
 - 📊 **Admin Panel**: Django admin interface for management
@@ -98,6 +101,14 @@ REDIS_HOST=redis
 REDIS_PORT=6379
 REDIS_DB=0
 
+# Download Limits (in MB)
+MAX_PREMIUM_DOWNLOAD_SIZE=500
+MAX_REGULAR_DOWNLOAD_SIZE=100
+
+# File size limits for different user types
+PREMIUM_DAILY_QUOTA=2000  # 2GB daily for premium users
+REGULAR_DAILY_QUOTA=500   # 500MB daily for regular users
+
 # Internationalization
 DJANGO_LANGUAGE_CODE=en-us
 DJANGO_TIME_ZONE=Asia/Tehran
@@ -150,15 +161,23 @@ docker-compose -f docker-compose-bot.yml up -d --build
 ### File Operations
 
 1. **Upload Files**: Send any document to the bot (up to 2GB)
+   - Files are validated against user quotas
+   - Premium users have higher limits
+   - File size warnings for quota/limit exceeded files
 2. **Download Videos**: Send a YouTube URL or other supported video link
    - Select from multiple quality options (144p to 4K)
    - Choose between video or audio-only downloads
    - Bot automatically finds the best available formats
+   - Pre-download size validation with quota warnings
+   - Quality buttons show warnings (⚠️) if file exceeds limits
 3. **Download**: Click the download button to get a secure download link
 4. **Premium Access**: Use `/premium` command to request unlimited downloads
    - Admins receive automatic notifications for new requests
    - Users are notified when promoted to premium status
-5. **Quota Management**: Premium users get higher download limits
+5. **Quota Management**: 
+   - Regular users: 100MB per file, 500MB daily quota
+   - Premium users: 500MB per file, 2GB daily quota
+   - Quotas reset daily at midnight
 
 ### Video Download Features
 
@@ -167,6 +186,29 @@ docker-compose -f docker-compose-bot.yml up -d --build
 - **Smart Fallbacks**: Automatically selects best available format if requested quality unavailable
 - **Anti-Bot Protection**: Cookie support to bypass platform restrictions
 - **Format Options**: MP4, WebM, Audio-only (MP3)
+- **Size Validation**: Pre-download validation with quota checking
+- **Warning System**: Quality buttons show ⚠️ for files exceeding limits
+- **Smart Error Messages**: Short, informative popup messages for quota issues
+- **Audio Downloads**: Separate validation for audio-only downloads
+
+### Callback Handler Features
+
+The bot includes sophisticated inline keyboard handling:
+
+- **Quality Selection**: Interactive buttons for video quality selection
+- **Size Warnings**: Buttons show ⚠️ for files exceeding quotas/limits
+- **Error Handling**: Smart error messages for quota/size issues
+- **Audio Downloads**: Separate validation and handling for audio files
+- **Session Management**: Temporary video sessions for quality selection
+- **Callback Validation**: Proper validation of all callback data patterns
+
+### Error Messages
+
+All popup messages are optimized for Telegram's callback answer limits:
+- Short, concise error messages
+- Clear size/quota information
+- Actionable suggestions (/premium upgrade)
+- No overly long text that gets truncated
 
 ## 🔄 Automatic Cleanup
 
@@ -228,10 +270,12 @@ The bot includes a comprehensive premium user management system:
 - **Automatic Notifications**: Users are automatically notified when promoted
 
 ### Premium Features
-- **Unlimited Downloads**: No daily download limits
+- **Higher File Limits**: Up to 500MB per file vs 100MB for regular users
+- **Larger Daily Quota**: 2GB daily downloads vs 500MB for regular users  
 - **Priority Processing**: Faster file processing
 - **Enhanced Speeds**: Improved download performance
 - **All File Formats**: Access to all supported file types
+- **Auto Quota Reset**: Daily quota automatically resets at midnight
 
 ### Admin Workflow
 1. User sends `/premium` command
@@ -303,10 +347,12 @@ telbot_downloader/
 
 ## 🔒 Security Features
 
-- **User Quotas**: Prevent abuse with download limits
+- **User Quotas**: Prevent abuse with download limits (500MB/2GB daily)
+- **File Size Limits**: 100MB (regular) / 500MB (premium) per file
 - **Premium System**: Request-based premium access with admin approval
 - **Anti-Spam Protection**: Prevents duplicate premium requests
-- **File Validation**: MIME type checking (commented code available)
+- **File Validation**: Size validation before and after download
+- **Smart Warnings**: Interactive buttons warn about quota/limit issues
 - **Secure URLs**: Time-limited download links
 - **Admin Controls**: Full administrative oversight with notification system
 

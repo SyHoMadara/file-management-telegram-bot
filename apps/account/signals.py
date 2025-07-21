@@ -4,6 +4,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
+from config import settings
 from .models import User
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,12 @@ def notify_premium_promotion(sender, instance, created, **kwargs):
     if not created:  # Only for updates, not new user creation
         # Check if the user was just promoted to premium
         if instance.is_premium and instance.premium_requested:
-            # Reset the premium_requested flag since it's now granted
-            User.objects.filter(pk=instance.pk).update(premium_requested=False)
+            # Update user's download limits for premium
+            User.objects.filter(pk=instance.pk).update(
+                premium_requested=False,
+                maximum_download_size_per_day=settings.MAX_PREMIUM_DOWNLOAD_SIZE,
+                remaining_download_size=settings.MAX_PREMIUM_DOWNLOAD_SIZE
+            )
             
             # Send notification to user in a separate thread
             if instance.username:
@@ -67,7 +72,7 @@ async def send_premium_promotion_notification(username):
             "🎉 **Congratulations!**\n\n"
             "✅ You have been promoted to **Premium**!\n\n"
             "🌟 **Premium Features Activated:**\n"
-            "• Unlimited daily downloads\n"
+            f"• Unlimited daily downloads (up to {settings.MAX_PREMIUM_DOWNLOAD_SIZE}MB per day)\n"
             "• Priority processing\n"
             "• Access to all file formats\n"
             "• Enhanced download speeds\n\n"

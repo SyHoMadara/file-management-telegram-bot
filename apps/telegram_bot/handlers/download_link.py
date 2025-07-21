@@ -171,8 +171,8 @@ async def _process_video_info(client: Client, message: Message, user, download_m
         video_download_set[video_properties.id] = video_properties
         logger.info(f"Created video download session for: {title}")
         
-        # Create quality selection keyboard
-        keyboard = _create_quality_keyboard(formats, video_properties.id)
+        # Create quality selection keyboard with size validation
+        keyboard = await _create_quality_keyboard_with_validation(formats, video_properties.id, user)
         
         message_text = (
             f"🎬 <b>{title}</b>\n"
@@ -383,6 +383,37 @@ def _create_quality_keyboard(formats: list, video_id: str) -> InlineKeyboardMark
     return InlineKeyboardMarkup(buttons)
 
 
+async def _create_quality_keyboard_with_validation(formats: list, video_id: str, user) -> InlineKeyboardMarkup:
+    """Create inline keyboard with quality options and size validation"""
+    buttons = []
+    
+    for fmt in formats:
+        quality = fmt['quality']
+        size_text = f" (~{fmt['filesize_mb']:.0f}MB)" if fmt['filesize_mb'] > 0 else ""
+        
+        # Check size against quota and limits
+        size_ok, size_message = await _validate_format_size_before_download(fmt, user)
+        
+        if not size_ok:
+            button_text = f"📹 {quality}{size_text} ⚠️"
+            # Use a different callback that shows error
+            callback_data = f"size_error_{video_id}_{fmt['format_id']}"
+        else:
+            button_text = f"📹 {quality}{size_text}"
+            callback_data = f"download_video_{video_id}_{fmt['format_id']}"
+        
+        buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+    
+    # Add audio-only option (usually smaller, so allow it)
+    audio_callback = f"download_audio_{video_id}"
+    buttons.append([InlineKeyboardButton("🎵 Audio Only (Best Quality)", callback_data=audio_callback)])
+    
+    # Add cancel button
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_video_download")])
+    
+    return InlineKeyboardMarkup(buttons)
+
+
 async def handle_video_download_callback(client: Client, callback_query):
     """Handle quality selection callback"""
     data = callback_query.data
@@ -406,6 +437,17 @@ async def handle_video_download_callback(client: Client, callback_query):
                 await callback_query.answer("❌ Video session expired. Please try again.", show_alert=True)
                 return
                 
+            # Find the specific format being requested
+            formats = video_properties.extra_data.get('formats', [])
+            selected_format = next((fmt for fmt in formats if fmt['format_id'] == format_id), None)
+            
+            if selected_format:
+                # Validate format size before download
+                is_valid, validation_message = await _validate_format_size_before_download(selected_format, video_properties.user)
+                if not is_valid:
+                    await callback_query.answer(f"❌ {validation_message}", show_alert=True)
+                    return
+            
             logger.info(f"Starting video download for user {video_properties.user.username}: format {format_id}")
             await callback_query.answer("⬇️ Download started...", show_alert=True)
             await _download_video(client, video_properties, format_id, is_audio_only=False)
@@ -424,10 +466,66 @@ async def handle_video_download_callback(client: Client, callback_query):
                 logger.warning(f"Video session expired for ID: {video_id}")
                 await callback_query.answer("❌ Video session expired. Please try again.", show_alert=True)
                 return
+            
+            # Check if user has remaining quota for audio download
+            # Estimate audio size (usually 3-5MB per minute for 192kbps MP3)
+            duration = video_properties.extra_data.get('duration', 0)
+            estimated_audio_size_mb = (duration / 60) * 4 if duration else 10  # 4MB per minute estimate, 10MB default
+            
+            from config.settings import MAX_PREMIUM_DOWNLOAD_SIZE, MAX_REGULAR_DOWNLOAD_SIZE
+            max_allowed_size = MAX_PREMIUM_DOWNLOAD_SIZE if video_properties.user.is_premium else MAX_REGULAR_DOWNLOAD_SIZE
+            remaining_size = video_properties.user.remaining_download_size
+            
+            # Check if estimated audio size exceeds limits
+            if estimated_audio_size_mb > max_allowed_size:
+                if video_properties.user.is_premium:
+                    await callback_query.answer(f"❌ Audio size ({estimated_audio_size_mb:.0f}MB) > limit ({max_allowed_size}MB)", show_alert=True)
+                else:
+                    await callback_query.answer(f"❌ Audio size ({estimated_audio_size_mb:.0f}MB) > limit. Use /premium for {MAX_PREMIUM_DOWNLOAD_SIZE}MB", show_alert=True)
+                return
+            
+            # Check remaining quota
+            if estimated_audio_size_mb > remaining_size:
+                await callback_query.answer(f"❌ Audio size ({estimated_audio_size_mb:.0f}MB) > quota ({remaining_size:.0f}MB)", show_alert=True)
+                return
                 
-            logger.info(f"Starting audio download for user {video_properties.user.username}")
+            logger.info(f"Starting audio download for user {video_properties.user.username} (estimated size: {estimated_audio_size_mb:.1f}MB)")
             await callback_query.answer("⬇️ Audio download started...", show_alert=True)
             await _download_video(client, video_properties, None, is_audio_only=True)
+            
+        elif data.startswith("size_error_"):
+            parts = data.split("_")
+            if len(parts) < 4:
+                logger.error(f"Invalid size error callback data format: {data}")
+                await callback_query.answer("❌ Invalid request format.", show_alert=True)
+                return
+                
+            video_id = parts[2]
+            format_id = parts[3]
+            
+            video_properties = video_download_set.get(video_id)
+            if not video_properties:
+                logger.warning(f"Video session expired for ID: {video_id}")
+                await callback_query.answer("❌ Video session expired. Please try again.", show_alert=True)
+                return
+            
+            # Get format info for detailed error message
+            formats = video_properties.extra_data.get('formats', [])
+            selected_format = next((fmt for fmt in formats if fmt['format_id'] == format_id), None)
+            
+            if selected_format:
+                from config.settings import MAX_PREMIUM_DOWNLOAD_SIZE
+                size_mb = selected_format.get('filesize_mb', 0)
+                remaining_mb = video_properties.user.remaining_download_size
+                
+                if video_properties.user.is_premium:
+                    error_message = f"⚠️ Size: {size_mb:.0f}MB exceeds quota: {remaining_mb:.0f}MB. Try lower quality or wait for reset."
+                else:
+                    error_message = f"⚠️ Size: {size_mb:.0f}MB exceeds quota: {remaining_mb:.0f}MB. Try lower quality or use /premium for upgrade."
+            else:
+                error_message = "⚠️ File too large. Try lower quality or /premium for upgrade."
+                
+            await callback_query.answer(error_message, show_alert=True)
             
         elif data == "cancel_video_download":
             logger.info(f"Video download cancelled by user {user_id}")
@@ -485,13 +583,47 @@ async def _download_video(client: Client, video_properties: File, format_id: str
         
     except FileSizeExeption as e:
         logger.error(f"File size error for user {video_properties.user.username}: {str(e)}")
-        await video_properties.download_message.edit_text(
-            f"⚠️ <b>File size exceeds your remaining download limit.</b>\n"
-            f"<b>File size:</b> {video_properties.file_size:.2f}MB\n"
-            f"<b>Remaining quota:</b> {video_properties.user.remaining_download_size:.2f}MB\n\n"
-            "Try selecting a lower quality or upgrade to premium for higher limits.",
-            parse_mode=ParseMode.HTML
-        )
+        
+        from config.settings import MAX_PREMIUM_DOWNLOAD_SIZE, MAX_REGULAR_DOWNLOAD_SIZE
+        
+        # Determine the error type and create appropriate message
+        error_message = str(e)
+        
+        if "exceeds maximum allowed size" in error_message:
+            # File is too large even for user type
+            if video_properties.user.is_premium:
+                await video_properties.download_message.edit_text(
+                    f"⚠️ <b>File is too large!</b>\n"
+                    f"<b>File size:</b> {video_properties.file_size:.2f}MB\n"
+                    f"<b>Maximum allowed:</b> {MAX_PREMIUM_DOWNLOAD_SIZE}MB (Premium)\n\n"
+                    f"Even premium users cannot download files larger than {MAX_PREMIUM_DOWNLOAD_SIZE}MB.\n"
+                    f"Please try selecting a lower quality.",
+                    parse_mode=ParseMode.HTML
+                )
+            else:
+                await video_properties.download_message.edit_text(
+                    f"⚠️ <b>File is too large!</b>\n"
+                    f"<b>File size:</b> {video_properties.file_size:.2f}MB\n"
+                    f"<b>Regular user limit:</b> {MAX_REGULAR_DOWNLOAD_SIZE}MB\n"
+                    f"<b>Premium user limit:</b> {MAX_PREMIUM_DOWNLOAD_SIZE}MB\n\n"
+                    f"💎 <b>Upgrade to Premium:</b>\n"
+                    f"• Up to {MAX_PREMIUM_DOWNLOAD_SIZE}MB per file\n"
+                    f"• Use /premium to request upgrade",
+                    parse_mode=ParseMode.HTML
+                )
+        else:
+            # File exceeds remaining quota
+            premium_text = ""
+            if not video_properties.user.is_premium:
+                premium_text = f"\n\n💎 <b>Upgrade to Premium:</b>\n• Up to {MAX_PREMIUM_DOWNLOAD_SIZE}MB daily downloads\n• Use /premium to request upgrade"
+            
+            await video_properties.download_message.edit_text(
+                f"⚠️ <b>File size exceeds your remaining download limit.</b>\n"
+                f"<b>File size:</b> {video_properties.file_size:.2f}MB\n"
+                f"<b>Remaining quota:</b> {video_properties.user.remaining_download_size:.2f}MB\n\n"
+                f"Try selecting a lower quality or wait for your quota to reset.{premium_text}",
+                parse_mode=ParseMode.HTML
+            )
     except Exception as e:
         logger.error(f"Unexpected error during video download for user {video_properties.user.username}: {str(e)}")
         await video_properties.download_message.edit_text("❌ An unexpected error occurred during download.")
@@ -518,14 +650,14 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
     logger.info(f"Starting {'audio' if is_audio_only else 'video'} download - Format: {format_id}")
     
     try:
-        # Base options with anti-bot detection measures
+        # Base options with enhanced anti-bot detection measures
         base_opts = {
             'outtmpl': f'{temp_file.name}.%(ext)s',
             'quiet': True,
             'no_warnings': True,
             # Enhanced headers to avoid bot detection
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
@@ -534,31 +666,48 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'none',
+                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
             },
             # Add cookies support to bypass YouTube restrictions
             'cookiefile': _get_cookies_file_path(),
-            # Extractor args for YouTube - try all available clients for maximum format extraction
+            # Enhanced extractor args for YouTube with better client selection
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web', 'ios', 'mweb', 'tv_embedded'],
-                    'player_skip': ['webpage'],  # Skip webpage player to avoid detection
-                    'include_hls_manifests': True,
+                    # Use Android client first as it's most reliable
+                    'player_client': ['android', 'android_music', 'android_creator', 'ios', 'ios_music', 'ios_creator', 'mweb', 'web'],
+                    'player_skip': ['webpage', 'configs'],  # Skip webpage player to avoid detection
+                    'include_hls_manifests': False,  # Disable HLS to avoid detection
                     'include_dash_manifests': True,
+                    'skip': ['dash', 'hls'],  # Skip problematic manifest types
+                    'innertube_host': 'youtubei.googleapis.com',
+                    'innertube_key': None,  # Let yt-dlp handle key extraction
                 }
             },
             # Add delay to avoid rate limiting
-            'sleep_interval': 2,
-            'max_sleep_interval': 5,
+            'sleep_interval': 1,
+            'max_sleep_interval': 3,
+            # Force IPv4 to avoid IPv6 issues
+            'force_ipv4': True,
+            # Retry options
+            'fragment_retries': 10,
+            'retries': 5,
         }
         
         # Prepare format-specific options with fallback
         if is_audio_only:
             ydl_opts = {
                 **base_opts,
-                'format': 'bestaudio/best',
+                'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=480]',
                 'extractaudio': True,
                 'audioformat': 'mp3',
                 'audioquality': '192K',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
             }
         else:
             if format_id:
@@ -605,27 +754,49 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
                 # If specific format fails, try with a more generic format
                 logger.warning(f"Download failed with specific format, trying fallback: {str(e)}")
                 if not is_audio_only and format_id:
-                    # Try with mobile client headers for better success rate
+                    # Try with Android mobile client headers for maximum success rate
                     fallback_opts = {
                         **base_opts,
                         'format': 'best[height<=720]/best',  # Fallback to best available
                         'http_headers': {
-                            'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 11; SM-G973F) gzip',
+                            'User-Agent': 'com.google.android.youtube/18.11.34 (Linux; U; Android 12; SM-G998B) gzip',
                             'X-YouTube-Client-Name': '3',
-                            'X-YouTube-Client-Version': '17.36.4',
+                            'X-YouTube-Client-Version': '18.11.34',
+                        },
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['android', 'android_music'],
+                                'player_skip': ['webpage', 'configs', 'js'],
+                                'include_hls_manifests': False,
+                                'include_dash_manifests': True,
+                                'skip': ['dash', 'hls'],
+                            }
+                        },
+                        'sleep_interval': 2,
+                    }
+                    logger.info("Attempting download with Android mobile client fallback")
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                        ydl.download([url])
+                else:
+                    # For audio or when no format_id, try with Android client
+                    fallback_opts = {
+                        **base_opts,
+                        'format': 'bestaudio/best' if is_audio_only else 'best',
+                        'http_headers': {
+                            'User-Agent': 'com.google.android.youtube/18.11.34 (Linux; U; Android 12; SM-G998B) gzip',
+                            'X-YouTube-Client-Name': '3',
+                            'X-YouTube-Client-Version': '18.11.34',
                         },
                         'extractor_args': {
                             'youtube': {
                                 'player_client': ['android'],
-                                'player_skip': ['webpage', 'configs'],
+                                'player_skip': ['webpage', 'configs', 'js'],
                             }
                         },
-                        'sleep_interval': 3,
                     }
-                    logger.info("Attempting download with mobile client fallback")
+                    logger.info("Attempting download with Android client fallback")
                     with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                         ydl.download([url])
-                else:
                     raise
         
         # Run download in executor to avoid blocking
@@ -681,12 +852,21 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
 
 
 async def _is_video_size_valid(video_properties: File):
-    """Check if video size is within user's quota"""
+    """Check if video size is within user's quota and premium limits"""
+    from config.settings import MAX_PREMIUM_DOWNLOAD_SIZE, MAX_REGULAR_DOWNLOAD_SIZE
+    
     file_size = video_properties.file_size
     user = video_properties.user
     remaining_size = user.remaining_download_size
-
-    if file_size >= remaining_size:
+    
+    # Check if file exceeds absolute maximum based on user type
+    max_allowed_size = MAX_PREMIUM_DOWNLOAD_SIZE if user.is_premium else MAX_REGULAR_DOWNLOAD_SIZE
+    
+    if file_size > max_allowed_size:
+        raise FileSizeExeption(f"File size ({file_size:.2f}MB) exceeds maximum allowed size ({max_allowed_size}MB) for {'premium' if user.is_premium else 'regular'} users.")
+    
+    # Check if file exceeds remaining quota
+    if file_size > remaining_size:
         raise FileSizeExeption("File size exceeds user's remaining download size.")
 
 
@@ -790,3 +970,29 @@ def _get_cookies_file_path() -> str:
     
     logger.info(f"Using cookies file: {cookies_file}")
     return str(cookies_file)
+
+
+async def _validate_format_size_before_download(format_info: dict, user) -> tuple[bool, str]:
+    """Validate if a format's estimated size is within user limits before downloading"""
+    from config.settings import MAX_PREMIUM_DOWNLOAD_SIZE, MAX_REGULAR_DOWNLOAD_SIZE
+    
+    filesize_mb = format_info.get('filesize_mb', 0)
+    remaining_size = user.remaining_download_size
+    max_allowed_size = MAX_PREMIUM_DOWNLOAD_SIZE if user.is_premium else MAX_REGULAR_DOWNLOAD_SIZE
+    
+    # If no size info available, allow download (will validate after)
+    if filesize_mb == 0:
+        return True, ""
+    
+    # Check absolute maximum
+    if filesize_mb > max_allowed_size:
+        if user.is_premium:
+            return False, f"File size ({filesize_mb:.0f}MB) exceeds premium limit ({max_allowed_size}MB)"
+        else:
+            return False, f"File size ({filesize_mb:.0f}MB) exceeds regular limit ({max_allowed_size}MB). Upgrade to premium for {MAX_PREMIUM_DOWNLOAD_SIZE}MB limit."
+    
+    # Check remaining quota
+    if filesize_mb > remaining_size:
+        return False, f"File size ({filesize_mb:.0f}MB) exceeds remaining quota ({remaining_size:.0f}MB)"
+    
+    return True, ""

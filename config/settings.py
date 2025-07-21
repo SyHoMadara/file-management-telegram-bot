@@ -278,3 +278,6 @@ CELERY_TIMEZONE = "UTC"
 
 # Celery Beat Configuration
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+MAX_PREMIUM_DOWNLOAD_SIZE = int(os.environ.get("MAX_PREMIUM_DOWNLOAD_SIZE", "4000"))  # in MB
+MAX_REGULAR_DOWNLOAD_SIZE = int(os.environ.get("MAX_REGULAR_DOWNLOAD_SIZE", "20"))  # in MB
