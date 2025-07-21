@@ -535,6 +535,8 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'none',
             },
+            # Add cookies support to bypass YouTube restrictions
+            'cookiefile': _get_cookies_file_path(),
             # Extractor args for YouTube - try all available clients for maximum format extraction
             'extractor_args': {
                 'youtube': {
@@ -767,3 +769,24 @@ def _get_quality_display_name(format_id: str, video_properties: File) -> str:
     
     # Fallback if format not found
     return f"Video ({format_id})"
+
+
+def _get_cookies_file_path() -> str:
+    """Get the path to the cookies file for yt-dlp"""
+    cookies_file = BASE_DIR / "data" / "cookies" / "youtube_cookies.txt"
+    
+    # Create cookies directory if it doesn't exist
+    cookies_dir = cookies_file.parent
+    os.makedirs(cookies_dir, exist_ok=True)
+    
+    # If cookies file doesn't exist, create an empty one
+    if not cookies_file.exists():
+        logger.info(f"Creating empty cookies file at: {cookies_file}")
+        with open(cookies_file, 'w') as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            f.write("# This file contains the HTTP cookies for YouTube\n")
+            f.write("# To use this file, export cookies from your browser and paste them here\n")
+            f.write("# Format: domain\tflag\tpath\tsecure\texpiration\tname\tvalue\n")
+    
+    logger.info(f"Using cookies file: {cookies_file}")
+    return str(cookies_file)

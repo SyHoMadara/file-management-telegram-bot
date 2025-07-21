@@ -9,6 +9,9 @@ A powerful and feature-rich Telegram bot built with Django and MinIO for efficie
 ## ✨ Features
 
 - 📁 **Large File Support**: Handle files up to 2GB
+- 🎬 **Video Download**: Download videos from YouTube and other platforms with yt-dlp
+- 🎛️ **Quality Selection**: Choose from multiple video qualities via inline buttons
+- 🍪 **Anti-Bot Protection**: Cookie support to bypass YouTube restrictions
 - 🔐 **User Management**: Premium user system with download quotas
 - ⏰ **Automatic Cleanup**: Celery Beat tasks for storage management
 - 🌐 **Multi-language Support**: English and Persian (Farsi)
@@ -21,6 +24,7 @@ A powerful and feature-rich Telegram bot built with Django and MinIO for efficie
 
 - **Backend**: Django 5.2.4
 - **Bot Framework**: Pyrogram 2.0.106
+- **Video Downloader**: yt-dlp 2024.12.13
 - **Storage**: MinIO Object Storage
 - **Task Queue**: Celery with Redis
 - **Database**: SQLite (configurable)
@@ -142,9 +146,21 @@ docker-compose -f docker-compose-bot.yml up -d --build
 
 ### File Operations
 
-1. **Upload**: Send any document to the bot (up to 2GB)
-2. **Download**: Click the download button to get a secure download link
-3. **Quota**: Premium users get higher download limits
+1. **Upload Files**: Send any document to the bot (up to 2GB)
+2. **Download Videos**: Send a YouTube URL or other supported video link
+   - Select from multiple quality options (144p to 4K)
+   - Choose between video or audio-only downloads
+   - Bot automatically finds the best available formats
+3. **Download**: Click the download button to get a secure download link
+4. **Quota**: Premium users get higher download limits
+
+### Video Download Features
+
+- **Supported Platforms**: YouTube, Twitter, TikTok, and 1000+ sites via yt-dlp
+- **Quality Selection**: Interactive buttons for different video qualities
+- **Smart Fallbacks**: Automatically selects best available format if requested quality unavailable
+- **Anti-Bot Protection**: Cookie support to bypass platform restrictions
+- **Format Options**: MP4, WebM, Audio-only (MP3)
 
 ## 🔄 Automatic Cleanup
 
@@ -155,6 +171,34 @@ The bot includes Celery Beat scheduled tasks for:
 - **Database Cleanup**: Removes orphaned records
 
 Configure cleanup intervals in the Django admin panel under **Periodic Tasks**.
+
+## 🍪 YouTube Cookies Configuration
+
+To bypass YouTube's bot detection and access more video formats, you can add browser cookies:
+
+### Quick Setup
+
+1. **Install Browser Extension**
+   - Chrome/Edge: "Get cookies.txt LOCALLY"
+   - Firefox: "cookies.txt"
+
+2. **Export Cookies**
+   - Visit youtube.com while logged in
+   - Use the extension to export cookies
+   - Copy the exported data
+
+3. **Add to Bot**
+   - Open `data/cookies/youtube_cookies.txt`
+   - Replace content with exported cookies
+   - Restart the bot
+
+### Benefits
+- Access to more video quality options
+- Reduced rate limiting
+- Better success rate for restricted videos
+- Support for age-restricted content
+
+See `data/cookies/README.md` for detailed instructions.
 
 ## 🛠️ Development
 
