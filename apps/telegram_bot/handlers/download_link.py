@@ -70,17 +70,20 @@ async def handle_video_link(client: Client, message: Message):
         logger.error(f"Video info error for user {user.username}: {str(e)}")
         error_msg = str(e).lower()
         
-        if "sign in" in error_msg or "bot" in error_msg or "cookies" in error_msg:
+        if "sign in" in error_msg or "bot" in error_msg or "cookies" in error_msg or "blocking" in error_msg:
             await download_message.edit_text(
-                "❌ <b>YouTube Bot Detection</b>\n\n"
-                "YouTube is currently blocking automated requests. This can happen when:\n"
-                "• Too many requests are made in a short time\n"
-                "• YouTube's anti-bot measures are active\n\n"
-                "🔄 <b>Please try:</b>\n"
-                "• Waiting a few minutes before trying again\n"
-                "• Using a different video URL\n"
-                "• Trying again later when traffic is lower\n\n"
-                "💡 <i>This is a temporary YouTube restriction, not a bot issue.</i>",
+                "🤖 <b>YouTube Bot Detection</b>\n\n"
+                "YouTube is currently blocking automated requests. This happens when:\n"
+                "• YouTube detects automated access patterns\n"
+                "• Too many requests from the same IP\n"
+                "• Temporary anti-bot measures are active\n\n"
+                "🔄 <b>Solutions:</b>\n"
+                "• Wait 5-10 minutes before trying again\n"
+                "• Try a different YouTube video\n"
+                "• Use the video URL at a different time\n"
+                "• Consider using YouTube Premium links if available\n\n"
+                "💡 <i>This is a temporary YouTube restriction, not a bot malfunction.</i>\n\n"
+                "🆘 <b>Alternative:</b> You can download the video manually and send it as a file to the bot.",
                 parse_mode=ParseMode.HTML
             )
         else:
@@ -101,71 +104,25 @@ async def handle_video_link(client: Client, message: Message):
 async def _get_video_info(url: str) -> dict:
     """Extract video information using yt-dlp"""
     logger.info(f"Extracting video info from URL: {url[:50]}...")
+    
+    # Use minimal options to match yt-dlp CLI default behavior
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+    }
+    
+    def extract_info():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+    
     try:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-            # Add user agent and other headers to avoid bot detection
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
-                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-                'Keep-Alive': '300',
-                'Connection': 'keep-alive',
-            },
-            # Add extractor args for YouTube - use multiple clients for maximum format extraction
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web', 'ios'],  # Try multiple clients
-                    'player_skip': [],  # Don't skip any players
-                }
-            },
-            # Force extraction of all available formats
-            'format_sort': ['res', 'ext'],  # Sort by resolution and extension
-            'listformats': False,  # Don't just list, actually extract info
-        }
-        
-        def extract_info():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
-        
-        # Run yt-dlp in a thread to avoid blocking
         info = await asyncio.get_event_loop().run_in_executor(None, extract_info)
-        logger.info(f"Video info extracted successfully. Title: {info.get('title', 'Unknown')}")
+        logger.info(f"Video info extraction successful! Title: {info.get('title', 'Unknown')}")
         return info
     except Exception as e:
-        logger.error(f"Error extracting video info from {url[:50]}...: {str(e)}")
-        
-        # Try a fallback with simplified options
-        try:
-            logger.info("Attempting fallback extraction with simplified options...")
-            fallback_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android'],  # Android client often works better
-                    }
-                },
-            }
-            
-            def fallback_extract():
-                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    return ydl.extract_info(url, download=False)
-            
-            info = await asyncio.get_event_loop().run_in_executor(None, fallback_extract)
-            logger.info("Fallback extraction successful!")
-            return info
-        except Exception as fallback_error:
-            logger.error(f"Fallback extraction also failed: {str(fallback_error)}")
-            raise VideoInfoException("Failed to extract video information. YouTube may be blocking requests.")
+        logger.error(f"Video info extraction failed: {str(e)}")
+        raise VideoInfoException(f"Failed to extract video information: {str(e)}")
 
 
 async def _process_video_info(client: Client, message: Message, user, download_message: Message, url: str, video_info: dict):
@@ -260,186 +217,149 @@ def _get_available_formats(video_info: dict) -> list:
         logger.warning("No formats found in video info")
         return []
     
-    logger.info(f"Processing {len(formats)} total formats from video info")
-    
-    # Debug: Log all formats to understand what we're getting vs CLI
-    logger.info("All available formats from yt-dlp:")
-    for i, fmt in enumerate(formats):
-        logger.info(f"Format {i+1}: ID={fmt.get('format_id')}, "
-                   f"height={fmt.get('height')}, width={fmt.get('width')}, "
-                   f"resolution={fmt.get('resolution')}, note={fmt.get('format_note')}, "
-                   f"vcodec={fmt.get('vcodec')}, acodec={fmt.get('acodec')}, "
-                   f"ext={fmt.get('ext')}, protocol={fmt.get('protocol')}")
-    
-    # Group formats by quality and find the best (most reliable) for each quality
-    quality_groups = {}
-    
+    # Keep only video formats (formats with video codec)
+    video_formats = []
     for fmt in formats:
-        # Skip audio-only formats (no video codec), storyboards, and image formats
         vcodec = fmt.get('vcodec', 'none')
         ext = fmt.get('ext', '')
         format_note = fmt.get('format_note', '')
         
+        # Skip audio-only formats and images
         if (vcodec == 'none' or vcodec is None or 
             ext in ['mhtml', 'jpg', 'png', 'webp'] or
             'storyboard' in format_note.lower()):
             continue
             
-        # Get quality information - try multiple fields
-        height = fmt.get('height', 0)
-        resolution = fmt.get('resolution', '')
-        format_id = fmt.get('format_id', '')
-        filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
-        protocol = fmt.get('protocol', 'https')
+        # Must have a URL to download
+        if not fmt.get('url'):
+            continue
+            
+        video_formats.append(fmt)
+    
+    # Convert to our format structure and group by quality
+    quality_groups = {}
+    
+    for fmt in video_formats:
+        quality_label, quality_height = _determine_format_quality(fmt)
         
-        # Determine quality label from multiple sources
-        quality_label = None
-        quality_height = 0
-        
-        # For YouTube Shorts and portrait videos, use the smaller dimension (width) as quality
-        width = fmt.get('width', 0)
-        if height and width and height > width:
-            # Portrait video (height > width) - use width as quality indicator
-            quality_label = f"{width}p"
-            quality_height = width
-        elif height and height > 0:
-            # Regular landscape video - use height
-            quality_label = f"{height}p"
-            quality_height = height
-        elif resolution and 'x' in resolution:
-            # Parse resolution like "1280x720" or "360x640"
-            try:
-                res_width, res_height = resolution.split('x')
-                res_width, res_height = int(res_width), int(res_height)
-                if res_height > res_width:
-                    # Portrait: use width as quality
-                    quality_height = res_width
-                    quality_label = f"{res_width}p"
-                else:
-                    # Landscape: use height as quality
-                    quality_height = res_height
-                    quality_label = f"{res_height}p"
-            except (ValueError, AttributeError):
-                pass
-        elif format_note:
-            # Extract quality from format_note like "720p", "1080p60", etc.
-            import re
-            quality_match = re.search(r'(\d+)p', format_note)
-            if quality_match:
-                quality_height = int(quality_match.group(1))
-                quality_label = f"{quality_height}p"
-        
-        # For well-known YouTube format IDs, use hardcoded mappings
-        if not quality_label:
-            format_quality_map = {
-                # Progressive MP4 formats
-                '18': ('360p', 360),   # MP4 360p
-                '22': ('720p', 720),   # MP4 720p  
-                '37': ('1080p', 1080), # MP4 1080p
-                '38': ('3072p', 3072), # MP4 4K
-                # Adaptive MP4 formats (video only) - PREFER THESE
-                '133': ('240p', 240),  # MP4 240p (video only)
-                '134': ('360p', 360),  # MP4 360p (video only)
-                '135': ('480p', 480),  # MP4 480p (video only)
-                '136': ('720p', 720),  # MP4 720p (video only)
-                '137': ('1080p', 1080), # MP4 1080p (video only)
-                '138': ('2160p', 2160), # MP4 4K (video only)
-                # High frame rate formats
-                '298': ('720p60', 720),  # MP4 720p60
-                '299': ('1080p60', 1080), # MP4 1080p60
-                # WebM formats
-                '242': ('240p', 240),  # WebM 240p
-                '243': ('360p', 360),  # WebM 360p
-                '244': ('480p', 480),  # WebM 480p
-                '247': ('720p', 720),  # WebM 720p
-                '248': ('1080p', 1080), # WebM 1080p
-                # VP9 formats
-                '278': ('144p', 144),  # WebM 144p VP9
-                '394': ('144p', 144),  # MP4 144p AV1
-                '395': ('240p', 240),  # MP4 240p AV1
-                '396': ('360p', 360),  # MP4 360p AV1
-                '397': ('480p', 480),  # MP4 480p AV1
-                '398': ('720p', 720),  # MP4 720p AV1
-                '399': ('1080p', 1080), # MP4 1080p AV1
-                # 3D formats
-                '82': ('360p', 360),   # MP4 360p 3D
-                '83': ('480p', 480),   # MP4 480p 3D  
-                '84': ('720p', 720),   # MP4 720p 3D
-                '85': ('1080p', 1080), # MP4 1080p 3D
-            }
-            if format_id in format_quality_map:
-                quality_label, quality_height = format_quality_map[format_id]
-        
-        # If we still don't have a quality, use format_id as fallback
-        if not quality_label:
-            quality_label = f"Format {format_id}"
-            quality_height = 0
-        
-        # Calculate reliability score to prioritize formats
-        reliability_score = 0
-        
-        # Prefer https protocol over m3u8/hls (m3u8 formats often fail)
-        if protocol == 'https':
-            reliability_score += 100
-        elif protocol in ['m3u8', 'hls', 'm3u8_native']:
-            reliability_score += 10  # Lower priority but still usable
-        
-        # Prefer mp4 over webm, prefer known formats
-        if ext == 'mp4':
-            reliability_score += 50
-        elif ext == 'webm':
-            reliability_score += 30
-        
-        # Prefer formats with filesize info
-        if filesize and filesize > 0:
-            reliability_score += 20
-        
-        # Prefer non-3D, non-HDR formats for general use
-        if '3D' not in format_note and 'HDR' not in format_note:
-            reliability_score += 10
-        
-        # Prefer non-"Untested" formats
-        if 'Untested' not in format_note:
-            reliability_score += 30
-        
-        # Group by quality and keep the most reliable format for each quality
         if quality_label not in quality_groups:
             quality_groups[quality_label] = []
         
         quality_groups[quality_label].append({
-            'format_id': format_id,
+            'format_id': fmt.get('format_id'),
             'quality': quality_label,
             'height': quality_height,
-            'filesize': filesize,
-            'ext': ext,
-            'filesize_mb': (filesize / (1024 * 1024)) if filesize else 0,
-            'vcodec': vcodec,
-            'format_note': format_note,
-            'protocol': protocol,
-            'reliability_score': reliability_score,
+            'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0),
+            'ext': fmt.get('ext'),
+            'filesize_mb': ((fmt.get('filesize') or fmt.get('filesize_approx', 0)) / (1024 * 1024)) if (fmt.get('filesize') or fmt.get('filesize_approx', 0)) else 0,
+            'vcodec': fmt.get('vcodec'),
+            'format_note': fmt.get('format_note', ''),
+            'protocol': fmt.get('protocol', 'https'),
+            'reliability_score': _calculate_reliability_score(fmt),
         })
     
     # Select the best format for each quality
-    video_formats = []
+    final_formats = []
     for quality_label, formats_for_quality in quality_groups.items():
         # Sort by reliability score (highest first)
         formats_for_quality.sort(key=lambda x: x['reliability_score'], reverse=True)
         best_format = formats_for_quality[0]
-        
-        logger.info(f"Quality {quality_label}: Selected format {best_format['format_id']} "
-                   f"(protocol: {best_format['protocol']}, score: {best_format['reliability_score']}) "
-                   f"over {len(formats_for_quality)-1} alternatives")
-        
-        video_formats.append(best_format)
+        final_formats.append(best_format)
     
-    # Sort by quality (height) descending, with fallback for unknown heights
-    video_formats.sort(key=lambda x: (x['height'] if x['height'] > 0 else -1), reverse=True)
+    # Sort by quality (height) descending
+    final_formats.sort(key=lambda x: (x['height'] if x['height'] > 0 else -1), reverse=True)
     
     # Limit to top 10 qualities to avoid inline keyboard limits
-    final_formats = video_formats[:10]
+    final_formats = final_formats[:10]
     
-    logger.info(f"Found {len(final_formats)} video formats: {[f['quality'] + ' (' + f['format_id'] + ')' for f in final_formats]}")
+    logger.info(f"Found {len(final_formats)} video formats")
     return final_formats
+
+
+def _determine_format_quality(fmt: dict) -> tuple:
+    """Determine quality label and height for a format"""
+    height = fmt.get('height', 0)
+    width = fmt.get('width', 0)
+    resolution = fmt.get('resolution', '')
+    format_note = fmt.get('format_note', '')
+    format_id = fmt.get('format_id', '')
+    
+    # For portrait videos (like YouTube Shorts), use width as quality
+    if height and width and height > width:
+        return f"{width}p", width
+    
+    # For landscape videos, use height
+    if height and height > 0:
+        return f"{height}p", height
+    
+    # Parse resolution string
+    if resolution and 'x' in resolution:
+        try:
+            res_width, res_height = resolution.split('x')
+            res_width, res_height = int(res_width), int(res_height)
+            if res_height > res_width:
+                return f"{res_width}p", res_width
+            else:
+                return f"{res_height}p", res_height
+        except (ValueError, AttributeError):
+            pass
+    
+    # Extract from format_note
+    import re
+    quality_match = re.search(r'(\d+)p', format_note)
+    if quality_match:
+        quality_height = int(quality_match.group(1))
+        return f"{quality_height}p", quality_height
+    
+    # Known YouTube format mappings
+    format_quality_map = {
+        '18': ('360p', 360), '22': ('720p', 720), '37': ('1080p', 1080), '38': ('3072p', 3072),
+        '133': ('240p', 240), '134': ('360p', 360), '135': ('480p', 480), '136': ('720p', 720),
+        '137': ('1080p', 1080), '138': ('2160p', 2160), '298': ('720p60', 720), '299': ('1080p60', 1080),
+        '242': ('240p', 240), '243': ('360p', 360), '244': ('480p', 480), '247': ('720p', 720),
+        '248': ('1080p', 1080), '278': ('144p', 144), '394': ('144p', 144), '395': ('240p', 240),
+        '396': ('360p', 360), '397': ('480p', 480), '398': ('720p', 720), '399': ('1080p', 1080),
+    }
+    
+    if format_id in format_quality_map:
+        return format_quality_map[format_id]
+    
+    # Fallback
+    return f"Format {format_id}", 0
+
+
+def _calculate_reliability_score(fmt: dict) -> int:
+    """Calculate reliability score for format selection"""
+    score = 0
+    
+    protocol = fmt.get('protocol', 'https')
+    ext = fmt.get('ext', '')
+    format_note = fmt.get('format_note', '')
+    filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
+    
+    # Prefer https over m3u8/hls
+    if protocol == 'https':
+        score += 100
+    elif protocol in ['m3u8', 'hls', 'm3u8_native']:
+        score += 20
+    
+    # Prefer mp4 over webm
+    if ext == 'mp4':
+        score += 50
+    elif ext == 'webm':
+        score += 30
+    
+    # Prefer formats with filesize
+    if filesize and filesize > 0:
+        score += 20
+    
+    # Avoid problematic formats
+    if 'Untested' not in format_note:
+        score += 30
+    if '3D' not in format_note and 'HDR' not in format_note:
+        score += 10
+    
+    return score
 
 
 def _create_quality_keyboard(formats: list, video_id: str) -> InlineKeyboardMarkup:
@@ -559,7 +479,7 @@ async def _download_video(client: Client, video_properties: File, format_id: str
         await _is_video_size_valid(video_properties)
         
         # Save to database
-        mime_type = "audio/mp3" if is_audio_only else "video/mp4"
+        mime_type = "audio/mp3" if is_audio_only else "video/mp4"https://redirector.gvt1.com/edgedl/android/repository/emulator-linux_x64-13762611.zip
         file_saved = await _save_video_to_db(video_properties, downloaded_file_path, mime_type)
         await _finalize_video_download(video_properties, file_saved)
         
@@ -603,23 +523,30 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
             'outtmpl': f'{temp_file.name}.%(ext)s',
             'quiet': True,
             'no_warnings': True,
-            # Add headers to avoid bot detection
+            # Enhanced headers to avoid bot detection
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
                 'Connection': 'keep-alive',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
             },
-            # Extractor args for YouTube
+            # Extractor args for YouTube - try all available clients for maximum format extraction
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['android', 'web', 'ios', 'mweb', 'tv_embedded'],
+                    'player_skip': ['webpage'],  # Skip webpage player to avoid detection
+                    'include_hls_manifests': True,
+                    'include_dash_manifests': True,
                 }
             },
             # Add delay to avoid rate limiting
-            'sleep_interval': 1,
-            'max_sleep_interval': 3,
+            'sleep_interval': 2,
+            'max_sleep_interval': 5,
         }
         
         # Prepare format-specific options with fallback
@@ -676,11 +603,24 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
                 # If specific format fails, try with a more generic format
                 logger.warning(f"Download failed with specific format, trying fallback: {str(e)}")
                 if not is_audio_only and format_id:
+                    # Try with mobile client headers for better success rate
                     fallback_opts = {
                         **base_opts,
                         'format': 'best[height<=720]/best',  # Fallback to best available
+                        'http_headers': {
+                            'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 11; SM-G973F) gzip',
+                            'X-YouTube-Client-Name': '3',
+                            'X-YouTube-Client-Version': '17.36.4',
+                        },
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['android'],
+                                'player_skip': ['webpage', 'configs'],
+                            }
+                        },
+                        'sleep_interval': 3,
                     }
-                    logger.info("Attempting download with fallback format: best[height<=720]/best")
+                    logger.info("Attempting download with mobile client fallback")
                     with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                         ydl.download([url])
                 else:
@@ -692,24 +632,12 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
         # Close the temp file before searching for downloaded files
         temp_file.close()
         
-        # Debug: Check what files were actually created
+        # Find downloaded files
         temp_dir = os.path.dirname(temp_file.name)
         temp_basename = os.path.basename(temp_file.name)
         
-        logger.info(f"Temp directory: {temp_dir}")
-        logger.info(f"Looking for files starting with: {temp_basename}")
-        
         all_files = os.listdir(temp_dir)
-        logger.info(f"All files in temp directory: {all_files}")
-        
         downloaded_files = [f for f in all_files if f.startswith(temp_basename)]
-        logger.info(f"Matching downloaded files: {downloaded_files}")
-        
-        # Debug: Check file sizes
-        for file in downloaded_files:
-            file_path = os.path.join(temp_dir, file)
-            file_size = os.path.getsize(file_path)
-            logger.info(f"File {file}: {file_size} bytes")
         
         if not downloaded_files:
             logger.error("No file was downloaded by yt-dlp")
@@ -737,7 +665,7 @@ async def _download_video_to_temp(url: str, temp_file, format_id: str = None, is
             raise DownloadException("Downloaded file not found")
             
         file_size = os.path.getsize(downloaded_file_path)
-        logger.info(f"Final selected file: {downloaded_file_path} - Size: {file_size} bytes")
+        logger.info(f"Selected file: {downloaded_file_path} ({file_size} bytes)")
         
         if file_size == 0:
             raise DownloadException("Downloaded file is empty")
