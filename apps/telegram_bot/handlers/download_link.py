@@ -479,7 +479,7 @@ async def _download_video(client: Client, video_properties: File, format_id: str
         await _is_video_size_valid(video_properties)
         
         # Save to database
-        mime_type = "audio/mp3" if is_audio_only else "video/mp4"https://redirector.gvt1.com/edgedl/android/repository/emulator-linux_x64-13762611.zip
+        mime_type = "audio/mp3" if is_audio_only else "video/mp4"
         file_saved = await _save_video_to_db(video_properties, downloaded_file_path, mime_type)
         await _finalize_video_download(video_properties, file_saved)
         
